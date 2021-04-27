@@ -467,10 +467,10 @@ namespace FlyByWireless.XPLM.DataAccess
         public static unsafe bool TryShare(string name, DataTypes type, Action notification, out Shared share)
         {
             [DllImport(Defs.Lib)]
-            static extern unsafe int XPLMShareData([MarshalAs(UnmanagedType.LPUTF8Str)] string dataName, int dataType, delegate* unmanaged<nint, void> notification, nint handle);
+            static extern unsafe int XPLMShareData([MarshalAs(UnmanagedType.LPUTF8Str)] string dataName, DataTypes dataType, delegate* unmanaged<nint, void> notification, nint handle);
 
             var h = GCHandle.Alloc(notification);
-            if (XPLMShareData(name, (int)type, &Notify, GCHandle.ToIntPtr(h)) == 0)
+            if (XPLMShareData(name, type, &Notify, GCHandle.ToIntPtr(h)) == 0)
                 return false;
             share = new(name, type, h);
             return true;
@@ -494,11 +494,11 @@ namespace FlyByWireless.XPLM.DataAccess
         public unsafe void Dispose()
         {
             [DllImport(Defs.Lib)]
-            static extern unsafe void XPLMUnshareData([MarshalAs(UnmanagedType.LPUTF8Str)] string dataName, int dataType, delegate* unmanaged<nint, void> notification, nint handle);
+            static extern unsafe void XPLMUnshareData([MarshalAs(UnmanagedType.LPUTF8Str)] string dataName, DataTypes dataType, delegate* unmanaged<nint, void> notification, nint handle);
 
             if (!_disposed)
             {
-                XPLMUnshareData(Name, (int)Type, &Notify, GCHandle.ToIntPtr(_handle));
+                XPLMUnshareData(Name, Type, &Notify, GCHandle.ToIntPtr(_handle));
                 _handle.Free();
                 _disposed = true;
             }
