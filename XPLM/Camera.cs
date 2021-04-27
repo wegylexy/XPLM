@@ -32,7 +32,7 @@ namespace FlyByWireless.XPLM
             [UnmanagedCallersOnly]
             static int C(ref CameraPosition cameraPosition, int isLosingControl, nint state)
             {
-                var c = ((CameraControl)GCHandle.FromIntPtr(state).Target!).Invoke(out var position, isLosingControl != 0);
+                var c = ((CameraControl)GCHandle.FromIntPtr(state).Target!)(out var position, isLosingControl != 0);
                 if (position.HasValue && !Unsafe.IsNullRef(ref cameraPosition))
                     cameraPosition = position!.Value;
                 return c ? 1 : 0;

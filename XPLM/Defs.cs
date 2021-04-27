@@ -13,7 +13,7 @@ namespace FlyByWireless.XPLM
         Up = 16
     }
 
-    public enum ASCIIControlKey
+    public enum ASCIIControlKey : byte
     {
         Return = 13,
         Escape = 27,
@@ -36,7 +36,7 @@ namespace FlyByWireless.XPLM
         Decimal = 46
     }
 
-    public enum VirtualKey
+    public enum VirtualKey : byte
     {
         Back = 0x08,
         Tab = 0x09,

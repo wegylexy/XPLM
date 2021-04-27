@@ -92,20 +92,20 @@ namespace FlyByWireless.XPLM.DataAccess
 
     public sealed class Data<T> where T : unmanaged
     {
-        readonly nint _handle;
+        readonly nint _id;
 
-        internal Data(nint handle) => _handle = handle;
+        internal Data(nint id) => _id = id;
 
         public unsafe T Value
         {
             get
             {
                 T value = default;
-                var read = ByteVector.XPLMGetDatavb(_handle, ref *(byte*)&value, 0, sizeof(T));
+                var read = ByteVector.XPLMGetDatavb(_id, ref *(byte*)&value, 0, sizeof(T));
                 Debug.Assert(read == sizeof(T));
                 return value;
             }
-            set => ByteVector.XPLMSetDatavb(_handle, ref *(byte*)&value, 0, sizeof(T));
+            set => ByteVector.XPLMSetDatavb(_id, ref *(byte*)&value, 0, sizeof(T));
         }
     }
 
@@ -116,11 +116,11 @@ namespace FlyByWireless.XPLM.DataAccess
             [DllImport(Defs.Lib)]
             static extern nint XPLMFindDataRef([MarshalAs(UnmanagedType.LPUTF8Str)] string name);
 
-            var h = XPLMFindDataRef(name);
-            return h == 0 ? null : new(h);
+            var i = XPLMFindDataRef(name);
+            return i == 0 ? null : new(i);
         }
 
-        internal readonly nint _handle;
+        internal readonly nint _id;
 
         public bool CanWrite
         {
@@ -129,7 +129,7 @@ namespace FlyByWireless.XPLM.DataAccess
                 [DllImport(Defs.Lib)]
                 static extern int XPLMCanWriteDataRef(nint handle);
 
-                return XPLMCanWriteDataRef(_handle) != 0;
+                return XPLMCanWriteDataRef(_id) != 0;
             }
         }
 
@@ -140,7 +140,7 @@ namespace FlyByWireless.XPLM.DataAccess
                 [DllImport(Defs.Lib)]
                 static extern int XPLMIsDataRefGood(nint handle);
 
-                return XPLMIsDataRefGood(_handle) != 0;
+                return XPLMIsDataRefGood(_id) != 0;
             }
         }
 
@@ -151,7 +151,7 @@ namespace FlyByWireless.XPLM.DataAccess
                 [DllImport(Defs.Lib)]
                 static extern int XPLMGetDataRefTypes(nint handle);
 
-                return (DataTypes)XPLMGetDataRefTypes(_handle);
+                return (DataTypes)XPLMGetDataRefTypes(_id);
             }
         }
 
@@ -162,14 +162,14 @@ namespace FlyByWireless.XPLM.DataAccess
                 [DllImport(Defs.Lib)]
                 static extern int XPLMGetDatai(nint handle);
 
-                return XPLMGetDatai(_handle);
+                return XPLMGetDatai(_id);
             }
             set
             {
                 [DllImport(Defs.Lib)]
                 static extern void XPLMSetDatai(nint handle, int value);
 
-                XPLMSetDatai(_handle, value);
+                XPLMSetDatai(_id, value);
             }
         }
 
@@ -180,14 +180,14 @@ namespace FlyByWireless.XPLM.DataAccess
                 [DllImport(Defs.Lib)]
                 static extern float XPLMGetDataf(nint handle);
 
-                return XPLMGetDataf(_handle);
+                return XPLMGetDataf(_id);
             }
             set
             {
                 [DllImport(Defs.Lib)]
                 static extern void XPLMSetDataf(nint handle, float value);
 
-                XPLMSetDataf(_handle, value);
+                XPLMSetDataf(_id, value);
             }
         }
 
@@ -198,26 +198,26 @@ namespace FlyByWireless.XPLM.DataAccess
                 [DllImport(Defs.Lib)]
                 static extern double XPLMGetDatad(nint handle);
 
-                return XPLMGetDatad(_handle);
+                return XPLMGetDatad(_id);
             }
             set
             {
                 [DllImport(Defs.Lib)]
                 static extern void XPLMSetDatad(nint handle, double value);
 
-                XPLMSetDatad(_handle, value);
+                XPLMSetDatad(_id, value);
             }
         }
 
-        public IntVector AsIntVector(int offset) => new(_handle, offset);
+        public IntVector AsIntVector(int offset) => new(_id, offset);
 
-        public FloatVector AsFloatVector(int offset) => new(_handle, offset);
+        public FloatVector AsFloatVector(int offset) => new(_id, offset);
 
-        public ByteVector AsByteVector(int offset) => new(_handle, offset);
+        public ByteVector AsByteVector(int offset) => new(_id, offset);
 
-        public Data<T> As<T>() where T : unmanaged => new(_handle);
+        public Data<T> As<T>() where T : unmanaged => new(_id);
 
-        internal DataRef(nint handle) => _handle = handle;
+        internal DataRef(nint id) => _id = id;
     }
 
     public interface IAccessor
@@ -454,7 +454,7 @@ namespace FlyByWireless.XPLM.DataAccess
 
             if (!_disposed)
             {
-                XPLMUnregisterAccessor(DataRef._handle);
+                XPLMUnregisterAccessor(DataRef._id);
                 _handle.Free();
                 _disposed = true;
             }
@@ -477,7 +477,7 @@ namespace FlyByWireless.XPLM.DataAccess
         }
 
         [UnmanagedCallersOnly]
-        internal static void Notify(nint handle) => ((Action)GCHandle.FromIntPtr(handle).Target!).Invoke();
+        internal static void Notify(nint handle) => ((Action)GCHandle.FromIntPtr(handle).Target!)();
 
         public string Name { get; }
 
