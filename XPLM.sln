@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.31220.234
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XPLM", "XPLM\XPLM.csproj", "{8B5F1F4A-B592-444B-81C6-7390153E2393}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{8B5F1F4A-B592-444B-81C6-7390153E2393}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8B5F1F4A-B592-444B-81C6-7390153E2393}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8B5F1F4A-B592-444B-81C6-7390153E2393}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8B5F1F4A-B592-444B-81C6-7390153E2393}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {E2F383B3-8A3E-4F85-A188-80741B099E05}
+	EndGlobalSection
+EndGlobal
