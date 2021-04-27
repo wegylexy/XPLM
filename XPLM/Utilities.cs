@@ -75,7 +75,7 @@ namespace FlyByWireless.XPLM
             return c._After?.Invoke(c, phase) != false ? 1 : 0;
         }
 
-        readonly nint _id;
+        internal readonly nint _id;
 
         readonly GCHandle _handle;
 
