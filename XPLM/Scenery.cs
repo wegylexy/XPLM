@@ -112,7 +112,7 @@ namespace FlyByWireless.XPLM
             return s;
         }
 
-        readonly nint _id;
+        internal readonly nint _id;
 
         SceneryObject(nint id) => _id = id;
 
