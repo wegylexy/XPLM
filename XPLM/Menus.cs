@@ -37,12 +37,28 @@ namespace FlyByWireless.XPLM
             _id = XPLMCreateMenu(name, parentMenu?._id ?? 0, parentItem, handler != null ? &H : null, GCHandle.ToIntPtr(_handle.Value));
         }
 
+        ~Menu() => Dispose();
+
+        bool _disposed;
         public void Dispose()
         {
-            [DllImport(Defs.Lib)]
-            static extern void XPLMDestroyMenu(nint menuID);
+            if (!_disposed)
+            {
+                [DllImport(Defs.Lib)]
+                static extern void XPLMDestroyMenu(nint menuID);
 
-            XPLMDestroyMenu(_id);
+                XPLMDestroyMenu(_id);
+                Clear();
+                _disposed = true;
+            }
+            GC.SuppressFinalize(this);
+        }
+
+        void Clear()
+        {
+            foreach (var i in _items)
+                i?._handle.Free();
+            _items.Clear();
         }
 
         public void ClearAllItems()
@@ -51,14 +67,14 @@ namespace FlyByWireless.XPLM
             static extern void XPLMClearAllMenuItems(nint menuID);
 
             XPLMClearAllMenuItems(_id);
-            // TODO: dispose of items
+            Clear();
         }
 
         internal List<MenuItem?> _items = new();
         public MenuItem AppendItem(string name, Command? commandToExecute = null)
         {
             MenuItem m = new(this);
-            var h = GCHandle.Alloc(m);
+            var h = m._handle;
             int i;
             if (commandToExecute is null)
             {
@@ -99,9 +115,11 @@ namespace FlyByWireless.XPLM
     {
         readonly Menu _menu;
 
+        internal readonly GCHandle _handle;
+
         int Index => _menu._items.IndexOf(this);
 
-        internal MenuItem(Menu menu) => _menu = menu;
+        internal MenuItem(Menu menu) => (_menu, _handle) = (menu, GCHandle.Alloc(this));
 
         public void Dispose()
         {
@@ -111,6 +129,7 @@ namespace FlyByWireless.XPLM
             var i = Index;
             XPLMRemoveMenuItem(_menu._id, i);
             _menu._items.RemoveAt(i);
+            _handle.Free();
         }
 
         public string Name

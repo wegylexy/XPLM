@@ -449,11 +449,11 @@ namespace FlyByWireless.XPLM.DataAccess
         bool _disposed;
         public void Dispose()
         {
-            [DllImport(Defs.Lib)]
-            static extern void XPLMUnregisterAccessor(nint dataRef);
-
             if (!_disposed)
             {
+                [DllImport(Defs.Lib)]
+                static extern void XPLMUnregisterAccessor(nint dataRef);
+
                 XPLMUnregisterAccessor(DataRef._id);
                 _handle.Free();
                 _disposed = true;
@@ -493,11 +493,11 @@ namespace FlyByWireless.XPLM.DataAccess
         bool _disposed;
         public unsafe void Dispose()
         {
-            [DllImport(Defs.Lib)]
-            static extern unsafe void XPLMUnshareData([MarshalAs(UnmanagedType.LPUTF8Str)] string dataName, DataTypes dataType, delegate* unmanaged<nint, void> notification, nint handle);
-
             if (!_disposed)
             {
+                [DllImport(Defs.Lib)]
+                static extern unsafe void XPLMUnshareData([MarshalAs(UnmanagedType.LPUTF8Str)] string dataName, DataTypes dataType, delegate* unmanaged<nint, void> notification, nint handle);
+
                 XPLMUnshareData(Name, Type, &Notify, GCHandle.ToIntPtr(_handle));
                 _handle.Free();
                 _disposed = true;
