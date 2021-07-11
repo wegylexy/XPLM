@@ -13,22 +13,44 @@ namespace FlyByWireless.XPLM
 
     public sealed class Menu : IDisposable
     {
+        public static Menu Plugins
+        {
+            get
+            {
+                [DllImport(Defs.Lib)]
+                static extern nint XPLMFindPluginsMenu();
+
+                return new(XPLMFindPluginsMenu());
+            }
+        }
+
+        public static Menu Aircraft
+        {
+            get
+            {
+                [DllImport(Defs.Lib)]
+                static extern nint XPLMFindAircraftMenu();
+
+                return new(XPLMFindAircraftMenu());
+            }
+        }
+
         [UnmanagedCallersOnly]
         static void H(nint menu, nint item)
         {
             var m = (Menu)GCHandle.FromIntPtr(menu).Target!;
-            m._handler!(m, (MenuItem)GCHandle.FromIntPtr(item).Target!);
+            m._handler!(m, (Item)GCHandle.FromIntPtr(item).Target!);
         }
 
-        internal readonly nint _id;
+        readonly nint _id;
 
         readonly GCHandle? _handle;
 
-        readonly Action<Menu, MenuItem>? _handler;
+        readonly Action<Menu, Item>? _handler;
 
         internal Menu(nint id) => _id = id;
 
-        public unsafe Menu(string name, Menu? parentMenu, int parentItem, Action<Menu, MenuItem>? handler = null)
+        public unsafe Menu(string name, Menu? parentMenu, int parentItem, Action<Menu, Item>? handler = null)
         {
             [DllImport(Defs.Lib)]
             static extern unsafe nint XPLMCreateMenu([MarshalAs(UnmanagedType.LPUTF8Str)] string name, nint parentMenu, int parentItem, delegate* unmanaged<nint, nint, void> handler, nint state);
@@ -71,10 +93,10 @@ namespace FlyByWireless.XPLM
             Clear();
         }
 
-        internal List<MenuItem?> _items = new();
-        public MenuItem AppendItem(string name, Command? commandToExecute = null)
+        internal List<Item?> _items = new();
+        public Item AppendItem(string name, Command? commandToExecute = null)
         {
-            MenuItem m = new(this);
+            Item m = new(this);
             var h = m._handle;
             int i;
             if (commandToExecute is null)
@@ -110,92 +132,67 @@ namespace FlyByWireless.XPLM
                 throw new InvalidOperationException();
             _items.Insert(i, null);
         }
-    }
 
-    public sealed class MenuItem : IDisposable
-    {
-        readonly Menu _menu;
-
-        internal readonly GCHandle _handle;
-
-        int Index => _menu._items.IndexOf(this);
-
-        internal MenuItem(Menu menu) => (_menu, _handle) = (menu, GCHandle.Alloc(this));
-
-        public void Dispose()
+        public sealed class Item : IDisposable
         {
-            [DllImport(Defs.Lib)]
-            static extern void XPLMRemoveMenuItem(nint menu, int index);
+            readonly Menu _menu;
 
-            var i = Index;
-            XPLMRemoveMenuItem(_menu._id, i);
-            _menu._items.RemoveAt(i);
-            _handle.Free();
-        }
+            internal readonly GCHandle _handle;
 
-        public string Name
-        {
-            set
+            int Index => _menu._items.IndexOf(this);
+
+            internal Item(Menu menu) => (_menu, _handle) = (menu, GCHandle.Alloc(this));
+
+            public void Dispose()
             {
                 [DllImport(Defs.Lib)]
-                static extern void XPLMSetMenuItemName(nint menu, int index, [MarshalAs(UnmanagedType.LPUTF8Str)] string itemName, int _);
+                static extern void XPLMRemoveMenuItem(nint menu, int index);
 
-                XPLMSetMenuItemName(_menu._id, Index, value, 0);
+                var i = Index;
+                XPLMRemoveMenuItem(_menu._id, i);
+                _menu._items.RemoveAt(i);
+                _handle.Free();
             }
-        }
 
-        public MenuCheck Check
-        {
-            set
+            public string Name
             {
-                [DllImport(Defs.Lib)]
-                static extern void XPLMCheckMenuItem(nint menu, int index, MenuCheck check);
+                set
+                {
+                    [DllImport(Defs.Lib)]
+                    static extern void XPLMSetMenuItemName(nint menu, int index, [MarshalAs(UnmanagedType.LPUTF8Str)] string itemName, int _);
 
-                XPLMCheckMenuItem(_menu._id, Index, value);
+                    XPLMSetMenuItemName(_menu._id, Index, value, 0);
+                }
             }
-            get
-            {
-                [DllImport(Defs.Lib)]
-                static extern void XPLMCheckMenuItem(nint menu, int index, out MenuCheck check);
 
-                XPLMCheckMenuItem(_menu._id, Index, out var check);
-                return check;
+            public MenuCheck Check
+            {
+                set
+                {
+                    [DllImport(Defs.Lib)]
+                    static extern void XPLMCheckMenuItem(nint menu, int index, MenuCheck check);
+
+                    XPLMCheckMenuItem(_menu._id, Index, value);
+                }
+                get
+                {
+                    [DllImport(Defs.Lib)]
+                    static extern void XPLMCheckMenuItem(nint menu, int index, out MenuCheck check);
+
+                    XPLMCheckMenuItem(_menu._id, Index, out var check);
+                    return check;
+                }
             }
-        }
 
-        public bool Enabled
-        {
-            set
+            public bool Enabled
             {
-                [DllImport(Defs.Lib)]
-                static extern void XPLMEnableMenuItem(nint menu, int index, int enabled);
+                set
+                {
+                    [DllImport(Defs.Lib)]
+                    static extern void XPLMEnableMenuItem(nint menu, int index, int enabled);
 
-                XPLMEnableMenuItem(_menu._id, Index, value ? 1 : 0);
-            }
-        }
-    }
-
-    public static class Menus
-    {
-        public static Menu Plugins
-        {
-            get
-            {
-                [DllImport(Defs.Lib)]
-                static extern nint XPLMFindPluginsMenu();
-
-                return new(XPLMFindPluginsMenu());
-            }
-        }
-
-        public static Menu Aircraft
-        {
-            get
-            {
-                [DllImport(Defs.Lib)]
-                static extern nint XPLMFindAircraftMenu();
-
-                return new(XPLMFindAircraftMenu());
+                    XPLMEnableMenuItem(_menu._id, Index, value ? 1 : 0);
+                }
             }
         }
     }
