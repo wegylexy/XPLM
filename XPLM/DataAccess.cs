@@ -70,24 +70,24 @@ namespace FlyByWireless.XPLM.DataAccess
     public sealed class ByteVector
     {
         [DllImport(Defs.Lib)]
-        internal static extern int XPLMGetDatavb(nint handle, ref byte values, int offset, int max);
+        internal static extern int XPLMGetDatab(nint handle, ref byte values, int offset, int max);
 
         [DllImport(Defs.Lib)]
-        internal static extern void XPLMSetDatavb(nint handle, ref byte values, int offset, int count);
+        internal static extern void XPLMSetDatab(nint handle, ref byte values, int offset, int count);
 
         readonly nint _handle;
 
         readonly int _offset;
 
-        public int Count => XPLMGetDatavb(_handle, ref Unsafe.NullRef<byte>(), 0, 0);
+        public int Count => XPLMGetDatab(_handle, ref Unsafe.NullRef<byte>(), 0, 0);
 
         internal ByteVector(nint handle, int offset) => (_handle, _offset) = (handle, offset);
 
         public int Read(Span<byte> destination) =>
-            XPLMGetDatavb(_handle, ref MemoryMarshal.GetReference(destination), _offset, destination.Length);
+            XPLMGetDatab(_handle, ref MemoryMarshal.GetReference(destination), _offset, destination.Length);
 
         public void Write(ReadOnlySpan<byte> source) =>
-            XPLMSetDatavb(_handle, ref MemoryMarshal.GetReference(source), _offset, source.Length);
+            XPLMSetDatab(_handle, ref MemoryMarshal.GetReference(source), _offset, source.Length);
     }
 
     public sealed class Data<T> where T : unmanaged
@@ -101,11 +101,11 @@ namespace FlyByWireless.XPLM.DataAccess
             get
             {
                 T value = default;
-                var read = ByteVector.XPLMGetDatavb(_id, ref *(byte*)&value, 0, sizeof(T));
+                var read = ByteVector.XPLMGetDatab(_id, ref *(byte*)&value, 0, sizeof(T));
                 Debug.Assert(read == sizeof(T));
                 return value;
             }
-            set => ByteVector.XPLMSetDatavb(_id, ref *(byte*)&value, 0, sizeof(T));
+            set => ByteVector.XPLMSetDatab(_id, ref *(byte*)&value, 0, sizeof(T));
         }
     }
 
@@ -361,7 +361,7 @@ namespace FlyByWireless.XPLM.DataAccess
         public unsafe DataRefRegistration(string name, DataTypes type, bool isWritable, IAccessor accessor)
         {
             [DllImport(Defs.Lib)]
-            unsafe static extern nint XPLMRegisterAccessor([MarshalAs(UnmanagedType.LPUTF8Str)] string dataName, int dataType, int isWritable,
+            unsafe static extern nint XPLMRegisterDataAccessor([MarshalAs(UnmanagedType.LPUTF8Str)] string dataName, int dataType, int isWritable,
                 delegate* unmanaged<nint, int> readInt, delegate* unmanaged<nint, int, void> writeInt,
                 delegate* unmanaged<nint, float> readFloat, delegate* unmanaged<nint, float, void> writeFloat,
                 delegate* unmanaged<nint, double> readDouble, delegate* unmanaged<nint, double, void> writeDouble,
@@ -433,7 +433,7 @@ namespace FlyByWireless.XPLM.DataAccess
             var isFloatArray = type.HasFlag(DataTypes.FloatArray);
             var isData = type.HasFlag(DataTypes.Data);
             nint r = GCHandle.ToIntPtr(_handle = GCHandle.Alloc(accessor));
-            DataRef = new(XPLMRegisterAccessor(name, (int)type, isWritable ? 1 : 0,
+            DataRef = new(XPLMRegisterDataAccessor(name, (int)type, isWritable ? 1 : 0,
                 isInt ? &ReadInt : null, isInt ? &WriteInt : null,
                 isFloat ? &ReadFloat : null, isFloat ? &WriteFloat : null,
                 isDouble ? &ReadDouble : null, isDouble ? &WriteDouble : null,
@@ -452,9 +452,9 @@ namespace FlyByWireless.XPLM.DataAccess
             if (!_disposed)
             {
                 [DllImport(Defs.Lib)]
-                static extern void XPLMUnregisterAccessor(nint dataRef);
+                static extern void XPLMUnregisterDataAccessor(nint dataRef);
 
-                XPLMUnregisterAccessor(DataRef._id);
+                XPLMUnregisterDataAccessor(DataRef._id);
                 _handle.Free();
                 _disposed = true;
             }

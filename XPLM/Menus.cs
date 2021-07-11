@@ -34,6 +34,7 @@ namespace FlyByWireless.XPLM
             static extern unsafe nint XPLMCreateMenu([MarshalAs(UnmanagedType.LPUTF8Str)] string name, nint parentMenu, int parentItem, delegate* unmanaged<nint, nint, void> handler, nint state);
 
             _handle = GCHandle.Alloc(this);
+            _handler = handler;
             _id = XPLMCreateMenu(name, parentMenu?._id ?? 0, parentItem, handler != null ? &H : null, GCHandle.ToIntPtr(_handle.Value));
         }
 

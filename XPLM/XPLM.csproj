@@ -13,14 +13,15 @@
     <RepositoryType>git</RepositoryType>
     <Nullable>enable</Nullable>
     <RootNamespace>FlyByWireless.XPLM</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ErrorProne.NET.Structs" Version="0.1.2">
+    <PackageReference Include="ErrorProne.NET.Structs" Version="0.4.0-beta.1">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.DotNet.ILCompiler" Version="6.0.0-preview.5.21226.1" />
+    <PackageReference Include="Microsoft.DotNet.ILCompiler" Version="6.0.0-preview.7.21360.3" />
   </ItemGroup>
 
   <ItemGroup>
@@ -37,13 +38,5 @@
   <PropertyGroup>
     <DefineConstants Condition="$(RuntimeIdentifier.StartsWith('win'))">$(DefineConstants);IBM</DefineConstants>
     <DefineConstants Condition="$(RuntimeIdentifier.StartsWith('osx'))">$(DefineConstants);APL</DefineConstants>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 </Project>

@@ -43,9 +43,9 @@ namespace FlyByWireless.XPLM
             if (!_disposed)
             {
                 [DllImport(Defs.Lib)]
-                static extern void XPLMDestryoInstance(nint id);
+                static extern void XPLMDestroyInstance(nint id);
 
-                XPLMDestryoInstance(_id);
+                XPLMDestroyInstance(_id);
                 _disposed = true;
             }
         }
