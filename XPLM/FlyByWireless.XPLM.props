@@ -1,0 +1,33 @@
+﻿<Project>
+
+	<PropertyGroup>
+		<RuntimeIdentifiers>win-x64;osx-x64;linux-x64</RuntimeIdentifiers>
+		<InvariantGlobalization>true</InvariantGlobalization>
+		<IlcGenerateStackTraceData>false</IlcGenerateStackTraceData>
+		<IlcDisableReflection>true</IlcDisableReflection>
+		<IlcOptimizationPreference>Speed</IlcOptimizationPreference>
+		<IlcFoldIdenticalMethodBodies>true</IlcFoldIdenticalMethodBodies>
+		<IlcDisableUnhandledExceptionExperience>true</IlcDisableUnhandledExceptionExperience>
+		<NativeLib>Shared</NativeLib>
+		<SelfContained>true</SelfContained>
+		<XplName Condition="$(RuntimeIdentifier.StartsWith('win'))">win.xpl</XplName>
+		<XplName Condition="$(RuntimeIdentifier.StartsWith('osx'))">mac.xpl</XplName>
+		<XplName Condition="$(RuntimeIdentifier.StartsWith('linux'))">lin.xpl</XplName>
+		<XPSDK>$(MSBuildThisFileDirectory)/SDK</XPSDK>
+	</PropertyGroup>
+
+	<ItemGroup Condition="$(RuntimeIdentifier.StartsWith('win'))">
+		<DirectPInvoke Include="XPLM_64" />
+		<DirectPInvoke Include="XPWidgets_64" />
+		<NativeLibrary Include="$(XPSDK)/Libraries/Win/XPLM_64.lib" />
+		<NativeLibrary Include="$(XPSDK)/Libraries/Win/XPWidgets_64.lib" />
+	</ItemGroup>
+
+	<ItemGroup Condition="$(RuntimeIdentifier.StartsWith('osx'))">
+		<DirectPInvoke Include="XPLM" />
+		<DirectPInvoke Include="XPWidgets" />
+		<NativeLibrary Include="$(XPSDK)/Libraries/Mac/XPLM.framework/XPLM" />
+		<NativeLibrary Include="$(XPSDK)/Libraries/Mac/XPWidgets.framework/XPWidgets" />
+	</ItemGroup>
+
+</Project>

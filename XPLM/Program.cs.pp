@@ -1,14 +1,15 @@
-﻿using System.Runtime.InteropServices;
+﻿using FlyByWireless.XPLM;
+using System.Runtime.InteropServices;
 using System.Text;
 
-namespace FlyByWireless.XPLM
+namespace $RootNamespace$
 {
     static class Program
     {
         const string
-            Name = "Fly by Wireless",
-            Signature = "hk.timtim.flybywireless",
-            Description = "P/Invoke XPLM plugin template.";
+            Name = "$AssemblyName$",
+            Signature = "$RootNamespace$",
+            Description = "X-Plane plugin using FlyByWireless.XPLM";
 
         [UnmanagedCallersOnly(EntryPoint = "XPluginStart")]
         public static int Start(in byte name, in byte signature, in byte description)
@@ -23,23 +24,27 @@ namespace FlyByWireless.XPLM
             S(name, Name);
             S(signature, Signature);
             S(description, Description);
+            Utilities.DebugString("Started.");
             return 1;
         }
 
         [UnmanagedCallersOnly(EntryPoint = "XPluginStop")]
-        public static void Stop() { }
+        public static void Stop()
+        {
+            Utilities.DebugString("Stopped.");
+        }
 
         [UnmanagedCallersOnly(EntryPoint = "XPluginEnable")]
         public static int Enable()
         {
-            // TODO: enable the plugin
+            Utilities.DebugString("Enabled.");
             return 1;
         }
 
         [UnmanagedCallersOnly(EntryPoint = "XPluginDisable")]
         public static void Disable()
         {
-            // TODO: disable the plugin
+            Utilities.DebugString("Disabled.");
         }
 
         [UnmanagedCallersOnly(EntryPoint = "XPluginReceiveMessage")]

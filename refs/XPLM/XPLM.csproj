@@ -1,0 +1,15 @@
+﻿<Project Sdk="MSBuild.Sdk.Extras">
+
+	<PropertyGroup>
+		<TargetFrameworks>net6.0</TargetFrameworks>
+		<AssemblyName>FlyByWireless.XPLM</AssemblyName>
+		<Version>1.0.0-alpha</Version>
+		<Nullable>enable</Nullable>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<Compile Include="../../XPLM/**.cs" Exclude="../../XPLM/obj/**" />
+	</ItemGroup>
+
+</Project>

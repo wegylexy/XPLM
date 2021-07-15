@@ -1,0 +1,8 @@
+﻿<Project>
+
+	<Target Name="XPL" AfterTargets="CopyNativeBinary">
+		<Delete Files="$(PublishDir)/$(XplName)" />
+		<Move SourceFiles="$(PublishDir)/$(TargetName)$(NativeBinaryExt)" DestinationFiles="$(PublishDir)/$(XplName)" />
+	</Target>
+
+</Project>
