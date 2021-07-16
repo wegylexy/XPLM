@@ -1,56 +1,43 @@
 ﻿using FlyByWireless.XPLM;
-using System.Runtime.InteropServices;
-using System.Text;
+using System;
 
-namespace FlyByWireless.XPL
+namespace XplTemplate
 {
-    static class Program
+    sealed class XPlugin : XPluginBase
     {
-        const string
-            Name = "Fly by Wireless",
-            Signature = "hk.timtim.flybywireless",
-            Description = "X-Plane plugin library template.";
+        public override string? Name => "Fly by Wireless";
+        public override string? Signature => "hk.timtim.flybywireless";
+        public override string? Description => "X-Plane plugin library template.";
 
-        [UnmanagedCallersOnly(EntryPoint = "XPluginStart")]
-        public static int Start(in byte name, in byte signature, in byte description)
+        public XPlugin() : base()
         {
-            static unsafe void S(in byte s, string value)
+            // e.g. check for API support
+            if (Utilities.Versions.XPLMVersion < 303)
             {
-                fixed (byte* p = &s)
-                {
-                    p[Encoding.UTF8.GetBytes(value, new(p, 255))] = 0;
-                }
+                throw new NotSupportedException("TCAS override not supported.");
             }
-            S(name, Name);
-            S(signature, Signature);
-            S(description, Description);
-            Utilities.DebugString("Started.");
-            return 1;
         }
 
-        [UnmanagedCallersOnly(EntryPoint = "XPluginStop")]
-        public static void Stop()
+        public override void Dispose()
         {
-            Utilities.DebugString("Stopped.");
+            // TODO: uninitialize
         }
 
-        [UnmanagedCallersOnly(EntryPoint = "XPluginEnable")]
-        public static int Enable()
+        public override bool Enable()
         {
-            Utilities.DebugString("Enabled.");
-            return 1;
+            // TODO: start loops
+            return true;
         }
 
-        [UnmanagedCallersOnly(EntryPoint = "XPluginDisable")]
-        public static void Disable()
+        public override void Disable()
         {
-            Utilities.DebugString("Disabled.");
+            // TODO: stop loops
         }
 
-        [UnmanagedCallersOnly(EntryPoint = "XPluginReceiveMessage")]
-        public static void ReceiveMessage(int from, int message, nint param)
+        public override void ReceiveMessage(int from, int message, nint param)
         {
-            // TODO: process message from another plugin
+            // TODO: handle message from aother plugin
+            base.ReceiveMessage(from, message, param);
         }
     }
 }

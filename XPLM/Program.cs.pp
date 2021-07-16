@@ -1,56 +1,52 @@
-﻿using FlyByWireless.XPLM;
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Text;
 
-namespace $RootNamespace$
+namespace FlyByWireless.XPLM
 {
     static class Program
     {
-        const string
-            Name = "$AssemblyName$",
-            Signature = "$RootNamespace$",
-            Description = "X-Plane plugin using FlyByWireless.XPLM";
+        private static XPluginBase? _plugin;
 
         [UnmanagedCallersOnly(EntryPoint = "XPluginStart")]
-        public static int Start(in byte name, in byte signature, in byte description)
+        private static int Start(ref byte name, ref byte signature, ref byte description)
         {
-            static unsafe void S(in byte s, string value)
+            static void StrCpy(ref byte u, string value)
             {
-                fixed (byte* p = &s)
-                {
-                    p[Encoding.UTF8.GetBytes(value, new(p, 255))] = 0;
-                }
+                var s = MemoryMarshal.CreateSpan(ref u, 256);
+                s[Encoding.UTF8.GetBytes(value, s[..^1])] = 0;
             }
-            S(name, Name);
-            S(signature, Signature);
-            S(description, Description);
-            Utilities.DebugString("Started.");
-            return 1;
+            try
+            {
+                _plugin = new $RootNamespace$.XPlugin();
+                StrCpy(ref name, _plugin.Name ?? "$AssemblyName$");
+                StrCpy(ref signature, _plugin.Signature ?? "$RootNamespace$");
+                StrCpy(ref description, _plugin.Description ?? "Built with FlyByWireless.XPLM");
+                return 1;
+            }
+            catch (Exception ex)
+            {
+                Utilities.DebugString(ex.ToString());
+                return 0;
+            }
         }
 
         [UnmanagedCallersOnly(EntryPoint = "XPluginStop")]
-        public static void Stop()
+        private static void Stop()
         {
-            Utilities.DebugString("Stopped.");
+            using (_plugin) 
+            {
+                _plugin = null;
+            }
         }
 
         [UnmanagedCallersOnly(EntryPoint = "XPluginEnable")]
-        public static int Enable()
-        {
-            Utilities.DebugString("Enabled.");
-            return 1;
-        }
+        private static int Enable() => _plugin!.Enable() ? 1 : 0;
 
         [UnmanagedCallersOnly(EntryPoint = "XPluginDisable")]
-        public static void Disable()
-        {
-            Utilities.DebugString("Disabled.");
-        }
+        private static void Disable() => _plugin!.Disable();
 
         [UnmanagedCallersOnly(EntryPoint = "XPluginReceiveMessage")]
-        public static void ReceiveMessage(int from, int message, nint param)
-        {
-            // TODO: process message from another plugin
-        }
+        private static void ReceiveMessage(int from, int message, nint param) =>
+            _plugin!.ReceiveMessage(from, message, param);
     }
 }

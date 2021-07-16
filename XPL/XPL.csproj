@@ -1,22 +1,23 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
+		<RootNamespace>XplTemplate</RootNamespace>
 		<TargetFramework>net6.0</TargetFramework>
-		<AssemblyName>FlyByWireless.XPL</AssemblyName>
-		<RootNamespace>FlyByWireless.XPL</RootNamespace>
-		<Nullable>enable</Nullable>
+		<AssemblyName>XplTemplate</AssemblyName>
 		<Authors>WONG Tin Chi Timothy</Authors>
 		<Company>Timmy Net Net Company</Company>
 		<Product>X-Plane plugin library template</Product>
 		<Copyright>(C) 2021 WONG Tin Chi Timothy. All rights reserved.</Copyright>
 		<RepositoryUrl>https://github.com/wegylexy/XPLM</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
+		<Nullable>enable</Nullable>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<Version>1.0.1-alpha</Version>
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="FlyByWireless.XPLM" Version="1.0.0-*"/>
-		<PackageReference Include="Microsoft.DotNet.ILCompiler" Version="6.0.0-*"/>
+		<PackageReference Include="FlyByWireless.XPLM" Version="1.0.*-*" />
+		<PackageReference Include="Microsoft.DotNet.ILCompiler" Version="6.0.*-*" />
 	</ItemGroup>
 
 </Project>

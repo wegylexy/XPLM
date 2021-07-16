@@ -3,7 +3,7 @@
 	<PropertyGroup>
 		<TargetFrameworks>net6.0</TargetFrameworks>
 		<AssemblyName>FlyByWireless.XPLM</AssemblyName>
-		<Version>1.0.0-alpha</Version>
+		<Version>1.0.1-alpha</Version>
 		<Authors>WONG Tin Chi Timothy</Authors>
 		<Company>Timmy Net Net Company</Company>
 		<Product>P/Invoke for X-Plane plugin library manager</Product>
@@ -36,7 +36,7 @@
 	<ItemGroup>
 		<Content Include="FlyByWireless.XPLM.props" PackagePath="build" />
 		<Content Include="FlyByWireless.XPLM.targets" PackagePath="build" />
-		<Content Include="Program.cs.pp" PackagePath="content" />
+		<Content Include="Program.cs.pp" PackagePath="contentFiles/cs/net6.0" BuildAction="Compile" />
 		<Content Include="SDK/**" PackagePath="build/SDK" />
 	</ItemGroup>
 
