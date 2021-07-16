@@ -1,4 +1,7 @@
-﻿using System.Runtime.InteropServices;
+﻿#if DEBUG
+using System.Diagnostics;
+#endif
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace FlyByWireless.XPLM
@@ -10,6 +13,17 @@ namespace FlyByWireless.XPLM
         [UnmanagedCallersOnly(EntryPoint = "XPluginStart")]
         private static int Start(ref byte name, ref byte signature, ref byte description)
         {
+#if DEBUG
+            Utilities.ErrorCallback = message =>
+            {
+                Debug.WriteLine(message);
+                if (Debugger.IsAttached)
+                {
+                    Debugger.Break();
+                }
+            };
+#endif
+
             static void StrCpy(ref byte u, string value)
             {
                 var s = MemoryMarshal.CreateSpan(ref u, 256);
@@ -33,20 +47,58 @@ namespace FlyByWireless.XPLM
         [UnmanagedCallersOnly(EntryPoint = "XPluginStop")]
         private static void Stop()
         {
-            using (_plugin) 
+            try
             {
-                _plugin = null;
+                using (_plugin) 
+                {
+                    _plugin = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Utilities.DebugString(ex.ToString());
             }
         }
 
         [UnmanagedCallersOnly(EntryPoint = "XPluginEnable")]
-        private static int Enable() => _plugin!.Enable() ? 1 : 0;
+        private static int Enable()
+        {
+            try
+            {
+                _plugin!.Enable();
+                return 1;
+            }
+            catch (Exception ex)
+            {
+                Utilities.DebugString(ex.ToString());
+                return 0;
+            }
+        }
 
         [UnmanagedCallersOnly(EntryPoint = "XPluginDisable")]
-        private static void Disable() => _plugin!.Disable();
+        private static void Disable()
+        {
+            try
+            {
+                _plugin!.Disable();
+            }
+            catch (Exception ex)
+            {
+                Utilities.DebugString(ex.ToString());
+            }
+        }
 
         [UnmanagedCallersOnly(EntryPoint = "XPluginReceiveMessage")]
-        private static void ReceiveMessage(int from, int message, nint param) =>
-            _plugin!.ReceiveMessage(from, message, param);
+        private static void ReceiveMessage(int from, int message, nint param)
+        {
+            try
+            {
+                _plugin!.ReceiveMessage(from, message, param);
+            }
+            catch (Exception ex)
+            {
+                Utilities.DebugString(ex.ToString());
+            }
+        }
     }
 }

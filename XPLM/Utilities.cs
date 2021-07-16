@@ -64,15 +64,31 @@ namespace FlyByWireless.XPLM
         [UnmanagedCallersOnly]
         static int B(nint id, CommandPhase phase, nint state)
         {
-            var c = (Command)GCHandle.FromIntPtr(state).Target!;
-            return c._Before?.Invoke(c, phase) != false ? 1 : 0;
+            try
+            {
+                var c = (Command)GCHandle.FromIntPtr(state).Target!;
+                return c._Before?.Invoke(c, phase) != false ? 1 : 0;
+            }
+            catch (Exception ex)
+            {
+                Utilities.DebugString(ex.ToString());
+                return 1;
+            }
         }
 
         [UnmanagedCallersOnly]
         static int A(nint id, CommandPhase phase, nint state)
         {
-            var c = (Command)GCHandle.FromIntPtr(state).Target!;
-            return c._After?.Invoke(c, phase) != false ? 1 : 0;
+            try
+            {
+                var c = (Command)GCHandle.FromIntPtr(state).Target!;
+                return c._After?.Invoke(c, phase) != false ? 1 : 0;
+            }
+            catch (Exception ex)
+            {
+                Utilities.DebugString(ex.ToString());
+                return 1;
+            }
         }
 
         internal readonly nint _id;
@@ -256,10 +272,18 @@ namespace FlyByWireless.XPLM
                 [DllImport(Defs.Lib)]
                 static extern unsafe void XPLMSetErrorCallback(delegate* unmanaged<nint, void> callback);
 
-
                 [UnmanagedCallersOnly]
-                static void E(nint message) =>
-                    _ErrorCallback!(Marshal.PtrToStringUTF8(message)!);
+                static void E(nint message)
+                {
+                    try
+                    {
+                        _ErrorCallback!(Marshal.PtrToStringUTF8(message)!);
+                    }
+                    catch (Exception ex)
+                    {
+                        DebugString(ex.ToString());
+                    }
+                }
 
                 _ErrorCallback = value;
                 XPLMSetErrorCallback(value != null ? &E : null);

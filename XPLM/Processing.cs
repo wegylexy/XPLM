@@ -36,9 +36,19 @@ namespace FlyByWireless.XPLM.Processing
             static extern nint XPLMCreateFlightLoop(in Create options);
 
             [UnmanagedCallersOnly]
-            static float Loop(float elapsedSinceLastCall, float elapsedSinceLastFlightLoop, int counter, nint handle) =>
-                ((Func<float, float, int, float>)GCHandle.FromIntPtr(handle).Target!)
-                    (elapsedSinceLastCall, elapsedSinceLastFlightLoop, counter);
+            static float Loop(float elapsedSinceLastCall, float elapsedSinceLastFlightLoop, int counter, nint handle)
+            {
+                try
+                {
+                    return ((Func<float, float, int, float>)GCHandle.FromIntPtr(handle).Target!)
+                        (elapsedSinceLastCall, elapsedSinceLastFlightLoop, counter);
+                }
+                catch (Exception ex)
+                {
+                    Utilities.DebugString(ex.ToString());
+                    return 0;
+                }
+            }
 
             nint r = GCHandle.ToIntPtr(_handle = GCHandle.Alloc(callback));
             _id = XPLMCreateFlightLoop(new(phase, &Loop, r));

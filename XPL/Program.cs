@@ -23,10 +23,9 @@ namespace XplTemplate
             // TODO: uninitialize
         }
 
-        public override bool Enable()
+        public override void Enable()
         {
             // TODO: start loops
-            return true;
         }
 
         public override void Disable()

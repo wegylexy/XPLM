@@ -41,8 +41,7 @@ namespace FlyByWireless.XPLM
         /// <para>This callback should be used to allocate any resources that the plugin maintains while enabled.</para>
         /// See also <seealso href="https://developer.x-plane.com/article/developing-plugins/#XPluginEnable">XPluginEnable</seealso>
         /// </summary>
-        /// <returns>Whether the plugin is enabled successfully.</returns>
-        public abstract bool Enable();
+        public abstract void Enable();
 
         /// <summary>
         /// <para>Deallocate any significant resources and prepare to not receive any callbacks for a potentially long duration.</para>

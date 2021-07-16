@@ -4,8 +4,8 @@ P/Invoke for X-Plane plugin library manager
 ## Reference Packages
 `Microsoft.DotNet.ILCompiler` must be a top level dependency for native AOT:
 ```xml
-<PackageReference Include="FlyByWireless.XPLM" Version="1.0.*-*"/>
-<PackageReference Include="Microsoft.DotNet.ILCompiler" Version="6.0.*-*"/>
+<PackageReference Include="FlyByWireless.XPLM" Version="1.0.2-*"/>
+<PackageReference Include="Microsoft.DotNet.ILCompiler" Version="6.0.0-*"/>
 ```
 ## Implement
 The plugin must implement `FlyByWireless.XPLM.XPluginBase` as `XPlugin` in its assembly root namespace:
@@ -35,10 +35,9 @@ namespace XplTemplate
             // TODO: uninitialize
         }
 
-        public override bool Enable()
+        public override void Enable()
         {
             // TODO: start loops
-            return true;
         }
 
         public override void Disable()
@@ -64,4 +63,15 @@ dotnet publish -r osx-x64 -c Release
 ```
 ```sh
 dotnet publish -r linux-x64 -c Release
+```
+In `Debug` config, plugin error messages are written to Debug Output; if a debugger is attached, it will also break. An error callback could be installed in `Release` config too:
+```cs
+Utilities.ErrorCallback = message =>
+{
+    Debug.WriteLine(message);
+    if (Debugger.IsAttached)
+    {
+        Debugger.Break();
+    }
+};
 ```
