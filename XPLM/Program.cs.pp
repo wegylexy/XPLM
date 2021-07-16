@@ -1,4 +1,5 @@
-﻿#if DEBUG
+﻿using System;
+#if DEBUG
 using System.Diagnostics;
 #endif
 using System.Runtime.InteropServices;
