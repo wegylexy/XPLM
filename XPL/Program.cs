@@ -1,4 +1,6 @@
 ﻿using FlyByWireless.XPLM;
+using FlyByWireless.XPLM.DataAccess;
+using FlyByWireless.XPLM.Processing;
 using System;
 
 namespace XplTemplate
@@ -9,6 +11,9 @@ namespace XplTemplate
         public override string? Signature => "hk.timtim.flybywireless";
         public override string? Description => "X-Plane plugin library template.";
 
+        readonly DataRef _overrideTcas;
+        readonly FlightLoop _myLoop;
+
         public XPlugin() : base()
         {
             // e.g. check for API support
@@ -16,21 +21,53 @@ namespace XplTemplate
             {
                 throw new NotSupportedException("TCAS override not supported.");
             }
+
+            // Example: finds datarefs
+            _overrideTcas = DataRef.Find("sim/operation/override/override_TCAS")!;
+            DataRef
+                bearing = DataRef.Find("sim/cockpit2/tcas/indicators/relative_bearing_degs")!,
+                distance = DataRef.Find("sim/cockpit2/tcas/indicators/relative_distance_mtrs")!,
+                altitude = DataRef.Find("sim/cockpit2/tcas/indicators/relative_altitude_mtrs")!;
+
+            // Example: registers my flight loop
+            _myLoop = new FlightLoop(FlightLoopPhase.AfterFlightModel, (elapsedSinceLastCall, elapsedTimeSinceLastFlightLoop, counter) =>
+            {
+                // TODO: set number of planes
+                var count = 2;
+                Span<float> values = stackalloc float[count];
+                // TODO: set bearings
+                bearing.AsFloatVector(0).Write(values);
+                // TODO: set distances
+                distance.AsFloatVector(0).Write(values);
+                // TODO: set altitudes
+                altitude.AsFloatVector(0).Write(values);
+                // Schedules for one second later
+                return 1; 
+            });
         }
 
         public override void Dispose()
         {
-            // TODO: uninitialize
+            // Example: unregisters my flight loop
+            _myLoop.Dispose();
         }
 
         public override void Enable()
         {
-            // TODO: start loops
+            // Example: overrides TCAS
+            _overrideTcas.AsInt = 1;
+
+            // Example: starts my flight loop one cycle after registration, i.e. immediately
+            _myLoop.Schedule(-1, false);
         }
 
         public override void Disable()
         {
-            // TODO: stop loops
+            // Example: stops my flight loop
+            _myLoop.Schedule(0, false);
+
+            // Example: clears TCAS override
+            _overrideTcas.AsInt = 0;
         }
 
         public override void ReceiveMessage(int from, int message, nint param)
