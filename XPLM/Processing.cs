@@ -1,82 +1,80 @@
-﻿using System;
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 
-namespace FlyByWireless.XPLM.Processing
+namespace FlyByWireless.XPLM.Processing;
+
+public enum FlightLoopPhase
 {
-    public enum FlightLoopPhase
+    BeforeFlightModel,
+    AfterFlightModel
+}
+
+public sealed class FlightLoop : IDisposable
+{
+    [StructLayout(LayoutKind.Sequential)]
+    unsafe readonly struct Create
     {
-        BeforeFlightModel,
-        AfterFlightModel
+        readonly int StructSize;
+        readonly FlightLoopPhase Phase;
+        readonly delegate* unmanaged<float, float, int, nint, float> Callback;
+        readonly nint State;
+
+        public Create(FlightLoopPhase phase, delegate* unmanaged<float, float, int, nint, float> callback, nint state)
+        {
+            (StructSize, Phase, State) = (sizeof(Create), phase, state);
+            Callback = callback;
+        }
     }
 
-    public sealed class FlightLoop : IDisposable
+    readonly nint _id;
+
+    readonly GCHandle _handle;
+
+    public unsafe FlightLoop(FlightLoopPhase phase, Func<float, float, int, float> callback)
     {
-        [StructLayout(LayoutKind.Sequential)]
-        unsafe readonly struct Create
-        {
-            readonly int StructSize;
-            readonly FlightLoopPhase Phase;
-            readonly delegate* unmanaged<float, float, int, nint, float> Callback;
-            readonly nint State;
+        [DllImport(Defs.Lib)]
+        static extern nint XPLMCreateFlightLoop(in Create options);
 
-            public Create(FlightLoopPhase phase, delegate* unmanaged<float, float, int, nint, float> callback, nint state)
+        [UnmanagedCallersOnly]
+        static float Loop(float elapsedSinceLastCall, float elapsedSinceLastFlightLoop, int counter, nint handle)
+        {
+            try
             {
-                (StructSize, Phase, State) = (sizeof(Create), phase, state);
-                Callback = callback;
+                return ((Func<float, float, int, float>)GCHandle.FromIntPtr(handle).Target!)
+                    (elapsedSinceLastCall, elapsedSinceLastFlightLoop, counter);
+            }
+            catch (Exception ex)
+            {
+                Utilities.DebugString(ex.ToString());
+                return 0;
             }
         }
 
-        readonly nint _id;
+        nint r = GCHandle.ToIntPtr(_handle = GCHandle.Alloc(callback));
+        _id = XPLMCreateFlightLoop(new(phase, &Loop, r));
+    }
 
-        readonly GCHandle _handle;
+    ~FlightLoop() => Dispose();
 
-        public unsafe FlightLoop(FlightLoopPhase phase, Func<float, float, int, float> callback)
+    bool _disposed;
+    public void Dispose()
+    {
+        [DllImport(Defs.Lib)]
+        static extern void XPLMDestroyFlightLoop(nint flightLoopId);
+
+        if (!_disposed)
         {
-            [DllImport(Defs.Lib)]
-            static extern nint XPLMCreateFlightLoop(in Create options);
-
-            [UnmanagedCallersOnly]
-            static float Loop(float elapsedSinceLastCall, float elapsedSinceLastFlightLoop, int counter, nint handle)
-            {
-                try
-                {
-                    return ((Func<float, float, int, float>)GCHandle.FromIntPtr(handle).Target!)
-                        (elapsedSinceLastCall, elapsedSinceLastFlightLoop, counter);
-                }
-                catch (Exception ex)
-                {
-                    Utilities.DebugString(ex.ToString());
-                    return 0;
-                }
-            }
-
-            nint r = GCHandle.ToIntPtr(_handle = GCHandle.Alloc(callback));
-            _id = XPLMCreateFlightLoop(new(phase, &Loop, r));
+            XPLMDestroyFlightLoop(_id);
+            _handle.Free();
+            _disposed = true;
         }
+        GC.SuppressFinalize(this);
+    }
 
-        ~FlightLoop() => Dispose();
+    public void Schedule(float interval, bool relativeToNow)
+    {
+        [DllImport(Defs.Lib)]
+        static extern void XPLMScheduleFlightLoop(nint flightLoopId, float interval, int relativeToNow);
 
-        bool _disposed;
-        public void Dispose()
-        {
-            [DllImport(Defs.Lib)]
-            static extern void XPLMDestroyFlightLoop(nint flightLoopId);
-
-            if (!_disposed)
-            {
-                XPLMDestroyFlightLoop(_id);
-                _handle.Free();
-                _disposed = true;
-            }
-            GC.SuppressFinalize(this);
-        }
-
-        public void Schedule(float interval, bool relativeToNow)
-        {
-            [DllImport(Defs.Lib)]
-            static extern void XPLMScheduleFlightLoop(nint flightLoopId, float interval, int relativeToNow);
-
-            XPLMScheduleFlightLoop(_id, interval, relativeToNow ? 1 : 0);
-        }
+        XPLMScheduleFlightLoop(_id, interval, relativeToNow ? 1 : 0);
     }
 }

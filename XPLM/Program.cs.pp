@@ -1,105 +1,103 @@
-﻿using System;
-#if DEBUG
+﻿#if DEBUG
 using System.Diagnostics;
 #endif
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace FlyByWireless.XPLM
-{
-    static class Program
-    {
-        private static XPluginBase? _plugin;
+namespace FlyByWireless.XPLM;
 
-        [UnmanagedCallersOnly(EntryPoint = "XPluginStart")]
-        private static int Start(ref byte name, ref byte signature, ref byte description)
-        {
+static class Program
+{
+    private static XPluginBase? _plugin;
+
+    [UnmanagedCallersOnly(EntryPoint = "XPluginStart")]
+    private static int Start(ref byte name, ref byte signature, ref byte description)
+    {
 #if DEBUG
-            Utilities.ErrorCallback = message =>
+        Utilities.ErrorCallback = message =>
+        {
+            Debug.WriteLine(message);
+            if (Debugger.IsAttached)
             {
-                Debug.WriteLine(message);
-                if (Debugger.IsAttached)
-                {
-                    Debugger.Break();
-                }
-            };
+                Debugger.Break();
+            }
+        };
 #endif
 
-            static void StrCpy(ref byte u, string value)
+        static void StrCpy(ref byte u, string value)
+        {
+            var s = MemoryMarshal.CreateSpan(ref u, 256);
+            s[Encoding.UTF8.GetBytes(value, s[..^1])] = 0;
+        }
+        try
+        {
+            _plugin = new $RootNamespace$.XPlugin();
+            StrCpy(ref name, _plugin.Name ?? "$AssemblyName$");
+            StrCpy(ref signature, _plugin.Signature ?? "$RootNamespace$");
+            StrCpy(ref description, _plugin.Description ?? "Built with FlyByWireless.XPLM");
+            return 1;
+        }
+        catch (Exception ex)
+        {
+            Utilities.DebugString(ex.ToString());
+            return 0;
+        }
+    }
+
+    [UnmanagedCallersOnly(EntryPoint = "XPluginStop")]
+    private static void Stop()
+    {
+        try
+        {
+            using (_plugin) 
             {
-                var s = MemoryMarshal.CreateSpan(ref u, 256);
-                s[Encoding.UTF8.GetBytes(value, s[..^1])] = 0;
-            }
-            try
-            {
-                _plugin = new $RootNamespace$.XPlugin();
-                StrCpy(ref name, _plugin.Name ?? "$AssemblyName$");
-                StrCpy(ref signature, _plugin.Signature ?? "$RootNamespace$");
-                StrCpy(ref description, _plugin.Description ?? "Built with FlyByWireless.XPLM");
-                return 1;
-            }
-            catch (Exception ex)
-            {
-                Utilities.DebugString(ex.ToString());
-                return 0;
+                _plugin = null;
             }
         }
-
-        [UnmanagedCallersOnly(EntryPoint = "XPluginStop")]
-        private static void Stop()
+        catch (Exception ex)
         {
-            try
-            {
-                using (_plugin) 
-                {
-                    _plugin = null;
-                }
-            }
-            catch (Exception ex)
-            {
-                Utilities.DebugString(ex.ToString());
-            }
+            Utilities.DebugString(ex.ToString());
         }
+    }
 
-        [UnmanagedCallersOnly(EntryPoint = "XPluginEnable")]
-        private static int Enable()
+    [UnmanagedCallersOnly(EntryPoint = "XPluginEnable")]
+    private static int Enable()
+    {
+        try
         {
-            try
-            {
-                _plugin!.Enable();
-                return 1;
-            }
-            catch (Exception ex)
-            {
-                Utilities.DebugString(ex.ToString());
-                return 0;
-            }
+            _plugin!.Enable();
+            return 1;
         }
-
-        [UnmanagedCallersOnly(EntryPoint = "XPluginDisable")]
-        private static void Disable()
+        catch (Exception ex)
         {
-            try
-            {
-                _plugin!.Disable();
-            }
-            catch (Exception ex)
-            {
-                Utilities.DebugString(ex.ToString());
-            }
+            Utilities.DebugString(ex.ToString());
+            return 0;
         }
+    }
 
-        [UnmanagedCallersOnly(EntryPoint = "XPluginReceiveMessage")]
-        private static void ReceiveMessage(int from, int message, nint param)
+    [UnmanagedCallersOnly(EntryPoint = "XPluginDisable")]
+    private static void Disable()
+    {
+        try
         {
-            try
-            {
-                _plugin!.ReceiveMessage(from, message, param);
-            }
-            catch (Exception ex)
-            {
-                Utilities.DebugString(ex.ToString());
-            }
+            _plugin!.Disable();
+        }
+        catch (Exception ex)
+        {
+            Utilities.DebugString(ex.ToString());
+        }
+    }
+
+    [UnmanagedCallersOnly(EntryPoint = "XPluginReceiveMessage")]
+    private static void ReceiveMessage(int from, int message, nint param)
+    {
+        try
+        {
+            _plugin!.ReceiveMessage(from, message, param);
+        }
+        catch (Exception ex)
+        {
+            Utilities.DebugString(ex.ToString());
         }
     }
 }

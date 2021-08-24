@@ -4,52 +4,50 @@ P/Invoke for X-Plane plugin library manager
 ## Reference Packages
 `Microsoft.DotNet.ILCompiler` must be a top level dependency for native AOT:
 ```xml
-<PackageReference Include="FlyByWireless.XPLM" Version="1.0.3-*"/>
+<PackageReference Include="FlyByWireless.XPLM" Version="1.0.4-*"/>
 <PackageReference Include="Microsoft.DotNet.ILCompiler" Version="6.0.0-*"/>
 ```
 ## Implement
 The plugin must implement `FlyByWireless.XPLM.XPluginBase` as `XPlugin` in its assembly root namespace:
 ```cs
 using FlyByWireless.XPLM;
-using System;
 
-namespace XplTemplate
+namespace XplTemplate;
+
+sealed class XPlugin : XPluginBase
 {
-    sealed class XPlugin : XPluginBase
+    public override string? Name => "Fly by Wireless";
+    public override string? Signature => "hk.timtim.flybywireless";
+    public override string? Description => "X-Plane plugin library template.";
+
+    public XPlugin() : base()
     {
-        public override string? Name => "Fly by Wireless";
-        public override string? Signature => "hk.timtim.flybywireless";
-        public override string? Description => "X-Plane plugin library template.";
-
-        public XPlugin() : base()
+        // e.g. check for API support
+        if (Utilities.Versions.XPLMVersion < 303)
         {
-            // e.g. check for API support
-            if (Utilities.Versions.XPLMVersion < 303)
-            {
-                throw new NotSupportedException("TCAS override not supported.");
-            }
+            throw new NotSupportedException("TCAS override not supported.");
         }
+    }
 
-        public override void Dispose()
-        {
-            // TODO: uninitialize
-        }
+    public override void Dispose()
+    {
+        // TODO: uninitialize
+    }
 
-        public override void Enable()
-        {
-            // TODO: start loops
-        }
+    public override void Enable()
+    {
+        // TODO: start loops
+    }
 
-        public override void Disable()
-        {
-            // TODO: stop loops
-        }
+    public override void Disable()
+    {
+        // TODO: stop loops
+    }
 
-        public override void ReceiveMessage(int from, int message, nint param)
-        {
-            // TODO: handle message from aother plugin
-            base.ReceiveMessage(from, message, param);
-        }
+    public override void ReceiveMessage(int from, int message, nint param)
+    {
+        // TODO: handle message from aother plugin
+        base.ReceiveMessage(from, message, param);
     }
 }
 ```
