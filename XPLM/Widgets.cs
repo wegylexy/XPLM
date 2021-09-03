@@ -122,7 +122,13 @@ public abstract class Widget : IDisposable
         XPAddWidgetCallback(_id, &Callback);
     }
 
-    // TODO: create custom widget
+    public unsafe Widget(Rectangle rectangle, bool visible, string descriptor, Widget? container)
+    {
+        [DllImport(Defs.Lib)]
+        static extern nint XPCreateCustomWidget(int left, int top, int right, int bottom, int visible, [MarshalAs(UnmanagedType.LPUTF8Str)] string descriptor, int isRoot, nint container, delegate* unmanaged<WidgetMessage, nint, nint, nint, int> callback);
+
+        _widgets.Add(_id = XPCreateCustomWidget(rectangle.Left, rectangle.Top, rectangle.Right, rectangle.Bottom, visible ? 1 : 0, descriptor, container == null ? 1 : 0, container?._id ?? 0, &Callback), this);
+    }
 
     protected virtual void Destroy()
     {

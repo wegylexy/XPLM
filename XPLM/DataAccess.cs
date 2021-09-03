@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace FlyByWireless.XPLM.DataAccess;
 
@@ -265,9 +266,23 @@ public sealed class DoubleAccessor : IAccessor
 
 public sealed class IntArrayAccessor : IAccessor
 {
-    readonly int[] _array;
+    int[] _array;
 
-    public IntArrayAccessor(int length) => _array = new int[length];
+    public Span<int> AsIntVector => _array;
+
+    public IntArrayAccessor(int length) => _array = length > 0 ? new int[length] : Array.Empty<int>();
+
+    public void Resize(int length)
+    {
+        if (length > 0)
+        {
+            Array.Resize(ref _array, length);
+        }
+        else
+        {
+            _array = Array.Empty<int>();
+        }
+    }
 
     int CountIntVector() => _array.Length;
     int ReadIntVector(int offset, Span<int> destination)
@@ -285,9 +300,23 @@ public sealed class IntArrayAccessor : IAccessor
 
 public sealed class FloatArrayAccessor : IAccessor
 {
-    readonly float[] _array;
+    float[] _array;
 
-    public FloatArrayAccessor(int length) => _array = new float[length];
+    public Span<float> AsFloatVector => _array;
+
+    public FloatArrayAccessor(int length) => _array = length > 0 ? new float[length] : Array.Empty<float>();
+
+    public void Resize(int length)
+    {
+        if (length > 0)
+        {
+            Array.Resize(ref _array, length);
+        }
+        else
+        {
+            _array = Array.Empty<float>();
+        }
+    }
 
     int CountFloatVector() => _array.Length;
     int ReadFloatVector(int offset, Span<float> destination)
@@ -303,9 +332,57 @@ public sealed class FloatArrayAccessor : IAccessor
     }
 }
 
+public sealed class DataAccessor : IAccessor
+{
+    byte[] _array;
+
+    public Span<byte> AsByteVector => _array;
+
+    public string AsASCII
+    {
+        get => Encoding.ASCII.GetString(_array);
+        set => _array = Encoding.ASCII.GetBytes(value);
+    }
+
+    public string AsUTF8
+    {
+        get => Encoding.UTF8.GetString(_array);
+        set => _array = Encoding.UTF8.GetBytes(value);
+    }
+
+    public DataAccessor(int length = 0) => _array = length > 0 ? new byte[length] : Array.Empty<byte>();
+
+    public void Resize(int length)
+    {
+        if (length > 0)
+        {
+            Array.Resize(ref _array, length);
+        }
+        else
+        {
+            _array = Array.Empty<byte>();
+        }
+    }
+
+    int CountByteVector() => _array.Length;
+    int ReadByteVector(int offset, Span<byte> destination)
+    {
+        var length = Math.Min(_array.Length - offset, destination.Length);
+        _array.AsSpan(offset, length).CopyTo(destination);
+        return length;
+    }
+    void WriteByteVector(int offset, ReadOnlySpan<byte> source)
+    {
+        var count = Math.Min(_array.Length - offset, source.Length);
+        source[..count].CopyTo(_array.AsSpan(offset, count));
+    }
+}
+
 public sealed class Accessor<T> : IAccessor where T : unmanaged
 {
-    readonly T _data;
+    T _data;
+
+    public ref T AsData => ref _data;
 
     public Accessor() =>
         Debug.Assert(typeof(T) != typeof(int) && typeof(T) != typeof(float) && typeof(T) != typeof(double));
@@ -433,12 +510,12 @@ public sealed class DataRefRegistration : IDisposable
         var isData = type.HasFlag(DataTypes.Data);
         nint r = GCHandle.ToIntPtr(_handle = GCHandle.Alloc(accessor));
         DataRef = new(XPLMRegisterDataAccessor(name, (int)type, isWritable ? 1 : 0,
-            isInt ? &ReadInt : null, isInt ? &WriteInt : null,
-            isFloat ? &ReadFloat : null, isFloat ? &WriteFloat : null,
-            isDouble ? &ReadDouble : null, isDouble ? &WriteDouble : null,
-            isIntArray ? &ReadIntVector : null, isIntArray ? &WriteIntVector : null,
-            isFloatArray ? &ReadFloatVector : null, isFloatArray ? &WriteFloatVector : null,
-            isData ? &ReadByteVector : null, isData ? &WriteByteVector : null,
+            isInt ? &ReadInt : null, isWritable && isInt ? &WriteInt : null,
+            isFloat ? &ReadFloat : null, isWritable && isFloat ? &WriteFloat : null,
+            isDouble ? &ReadDouble : null, isWritable && isDouble ? &WriteDouble : null,
+            isIntArray ? &ReadIntVector : null, isWritable && isIntArray ? &WriteIntVector : null,
+            isFloatArray ? &ReadFloatVector : null, isWritable && isFloatArray ? &WriteFloatVector : null,
+            isData ? &ReadByteVector : null, isWritable && isData ? &WriteByteVector : null,
             r, r
         ));
     }

@@ -68,7 +68,7 @@ public sealed class Command : IDisposable
         }
         catch (Exception ex)
         {
-            Utilities.DebugString(ex.ToString());
+            Utilities.DebugString(ex.ToString() + "\n");
             return 1;
         }
     }
@@ -83,7 +83,7 @@ public sealed class Command : IDisposable
         }
         catch (Exception ex)
         {
-            Utilities.DebugString(ex.ToString());
+            Utilities.DebugString(ex.ToString() + "\n");
             return 1;
         }
     }
@@ -278,7 +278,7 @@ public static class Utilities
                 }
                 catch (Exception ex)
                 {
-                    DebugString(ex.ToString());
+                    DebugString(ex.ToString() + "\n");
                 }
             }
 

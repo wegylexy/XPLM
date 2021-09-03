@@ -44,7 +44,7 @@ public sealed class FlightLoop : IDisposable
             }
             catch (Exception ex)
             {
-                Utilities.DebugString(ex.ToString());
+                Utilities.DebugString(ex.ToString() + "\n");
                 return 0;
             }
         }
