@@ -39,7 +39,7 @@ static class Program
         }
         catch (Exception ex)
         {
-            Utilities.DebugString(ex.ToString());
+            Utilities.DebugString(ex.ToString() + "\n");
             return 0;
         }
     }
@@ -56,7 +56,7 @@ static class Program
         }
         catch (Exception ex)
         {
-            Utilities.DebugString(ex.ToString());
+            Utilities.DebugString(ex.ToString() + "\n");
         }
     }
 
@@ -70,7 +70,7 @@ static class Program
         }
         catch (Exception ex)
         {
-            Utilities.DebugString(ex.ToString());
+            Utilities.DebugString(ex.ToString() + "\n");
             return 0;
         }
     }
@@ -84,7 +84,7 @@ static class Program
         }
         catch (Exception ex)
         {
-            Utilities.DebugString(ex.ToString());
+            Utilities.DebugString(ex.ToString() + "\n");
         }
     }
 
@@ -97,7 +97,7 @@ static class Program
         }
         catch (Exception ex)
         {
-            Utilities.DebugString(ex.ToString());
+            Utilities.DebugString(ex.ToString() + "\n");
         }
     }
 }

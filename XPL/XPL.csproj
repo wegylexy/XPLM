@@ -12,11 +12,11 @@
 		<RepositoryType>git</RepositoryType>
 		<Nullable>enable</Nullable>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-		<Version>1.0.4-alpha</Version>
+		<Version>1.0.7-alpha</Version>
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="FlyByWireless.XPLM" Version="1.0.4-*" />
+		<PackageReference Include="FlyByWireless.XPLM" Version="1.0.7-*" />
 		<PackageReference Include="Microsoft.DotNet.ILCompiler" Version="6.0.0-*" />
 	</ItemGroup>
 

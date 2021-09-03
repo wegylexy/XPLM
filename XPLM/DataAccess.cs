@@ -111,14 +111,16 @@ public sealed class Data<T> where T : unmanaged
 
 public sealed class DataRef
 {
-    public static DataRef? Find(string name)
+    public static DataRef? Find(ReadOnlySpan<byte> name)
     {
         [DllImport(Defs.Lib)]
-        static extern nint XPLMFindDataRef([MarshalAs(UnmanagedType.LPUTF8Str)] string name);
+        static extern nint XPLMFindDataRef(in byte name);
 
-        var i = XPLMFindDataRef(name);
+        var i = XPLMFindDataRef(in MemoryMarshal.AsRef<byte>(name));
         return i == 0 ? null : new(i);
     }
+
+    public static DataRef? Find(string name) => Find(Encoding.UTF8.GetBytes(name));
 
     internal readonly nint _id;
 
@@ -209,11 +211,11 @@ public sealed class DataRef
         }
     }
 
-    public IntVector AsIntVector(int offset) => new(_id, offset);
+    public IntVector AsIntVector(int offset = 0) => new(_id, offset);
 
-    public FloatVector AsFloatVector(int offset) => new(_id, offset);
+    public FloatVector AsFloatVector(int offset = 0) => new(_id, offset);
 
-    public ByteVector AsByteVector(int offset) => new(_id, offset);
+    public ByteVector AsByteVector(int offset = 0) => new(_id, offset);
 
     public Data<T> As<T>() where T : unmanaged => new(_id);
 
@@ -222,22 +224,22 @@ public sealed class DataRef
 
 public interface IAccessor
 {
-    int AsInt { get => 0; set { } }
+    int AsInt { get => default; set { } }
 
-    float AsFloat { get => 0; set { } }
+    float AsFloat { get => default; set { } }
 
-    double AsDouble { get => 0; set { } }
+    double AsDouble { get => default; set { } }
 
-    int CountIntVector() => ReadIntVector(0, Span<int>.Empty);
-    int ReadIntVector(int offset, Span<int> destination) => 0;
+    int CountIntVector() => default;
+    int ReadIntVector(int offset, Span<int> destination) => default;
     void WriteIntVector(int offset, ReadOnlySpan<int> source) { }
 
-    int CountFloatVector() => ReadFloatVector(0, Span<float>.Empty);
-    int ReadFloatVector(int offset, Span<float> destination) => 0;
+    int CountFloatVector() => default;
+    int ReadFloatVector(int offset, Span<float> destination) => default;
     void WriteFloatVector(int offset, ReadOnlySpan<float> source) { }
 
-    int CountByteVector() => ReadByteVector(0, Span<byte>.Empty);
-    int ReadByteVector(int offset, Span<byte> destination) => 0;
+    int CountByteVector() => default;
+    int ReadByteVector(int offset, Span<byte> destination) => default;
     void WriteByteVector(int offset, ReadOnlySpan<byte> source) { }
 }
 
@@ -266,32 +268,22 @@ public sealed class DoubleAccessor : IAccessor
 
 public sealed class IntArrayAccessor : IAccessor
 {
-    int[] _array;
+    int[] _array = Array.Empty<int>();
 
-    public Span<int> AsIntVector => _array;
-
-    public IntArrayAccessor(int length) => _array = length > 0 ? new int[length] : Array.Empty<int>();
-
-    public void Resize(int length)
+    public int[] IntArray
     {
-        if (length > 0)
-        {
-            Array.Resize(ref _array, length);
-        }
-        else
-        {
-            _array = Array.Empty<int>();
-        }
+        get => _array;
+        set => _array = value ?? Array.Empty<int>();
     }
 
-    int CountIntVector() => _array.Length;
-    int ReadIntVector(int offset, Span<int> destination)
+    public int CountIntVector() => _array.Length;
+    public int ReadIntVector(int offset, Span<int> destination)
     {
         var length = Math.Min(_array.Length - offset, destination.Length);
         _array.AsSpan(offset, length).CopyTo(destination);
         return length;
     }
-    void WriteIntVector(int offset, ReadOnlySpan<int> source)
+    public void WriteIntVector(int offset, ReadOnlySpan<int> source)
     {
         var count = Math.Min(_array.Length - offset, source.Length);
         source[..count].CopyTo(_array.AsSpan(offset, count));
@@ -300,32 +292,22 @@ public sealed class IntArrayAccessor : IAccessor
 
 public sealed class FloatArrayAccessor : IAccessor
 {
-    float[] _array;
+    float[] _array = Array.Empty<float>();
 
-    public Span<float> AsFloatVector => _array;
-
-    public FloatArrayAccessor(int length) => _array = length > 0 ? new float[length] : Array.Empty<float>();
-
-    public void Resize(int length)
+    public float[] FloatArray
     {
-        if (length > 0)
-        {
-            Array.Resize(ref _array, length);
-        }
-        else
-        {
-            _array = Array.Empty<float>();
-        }
+        get => _array;
+        set => _array = value ?? Array.Empty<float>();
     }
 
-    int CountFloatVector() => _array.Length;
-    int ReadFloatVector(int offset, Span<float> destination)
+    public int CountFloatVector() => _array.Length;
+    public int ReadFloatVector(int offset, Span<float> destination)
     {
         var length = Math.Min(_array.Length - offset, destination.Length);
         _array.AsSpan(offset, length).CopyTo(destination);
         return length;
     }
-    void WriteFloatVector(int offset, ReadOnlySpan<float> source)
+    public void WriteFloatVector(int offset, ReadOnlySpan<float> source)
     {
         var count = Math.Min(_array.Length - offset, source.Length);
         source[..count].CopyTo(_array.AsSpan(offset, count));
@@ -334,44 +316,22 @@ public sealed class FloatArrayAccessor : IAccessor
 
 public sealed class DataAccessor : IAccessor
 {
-    byte[] _array;
+    byte[] _array = Array.Empty<byte>();
 
-    public Span<byte> AsByteVector => _array;
-
-    public string AsASCII
+    public byte[] Data
     {
-        get => Encoding.ASCII.GetString(_array);
-        set => _array = Encoding.ASCII.GetBytes(value);
+        get => _array;
+        set => _array = value ?? Array.Empty<byte>();
     }
 
-    public string AsUTF8
-    {
-        get => Encoding.UTF8.GetString(_array);
-        set => _array = Encoding.UTF8.GetBytes(value);
-    }
-
-    public DataAccessor(int length = 0) => _array = length > 0 ? new byte[length] : Array.Empty<byte>();
-
-    public void Resize(int length)
-    {
-        if (length > 0)
-        {
-            Array.Resize(ref _array, length);
-        }
-        else
-        {
-            _array = Array.Empty<byte>();
-        }
-    }
-
-    int CountByteVector() => _array.Length;
-    int ReadByteVector(int offset, Span<byte> destination)
+    public int CountByteVector() => _array.Length;
+    public int ReadByteVector(int offset, Span<byte> destination)
     {
         var length = Math.Min(_array.Length - offset, destination.Length);
         _array.AsSpan(offset, length).CopyTo(destination);
         return length;
     }
-    void WriteByteVector(int offset, ReadOnlySpan<byte> source)
+    public void WriteByteVector(int offset, ReadOnlySpan<byte> source)
     {
         var count = Math.Min(_array.Length - offset, source.Length);
         source[..count].CopyTo(_array.AsSpan(offset, count));
@@ -382,22 +342,20 @@ public sealed class Accessor<T> : IAccessor where T : unmanaged
 {
     T _data;
 
-    public ref T AsData => ref _data;
+    public ref T Data => ref _data;
 
     public Accessor() =>
         Debug.Assert(typeof(T) != typeof(int) && typeof(T) != typeof(float) && typeof(T) != typeof(double));
 
-#pragma warning disable CA1822 // Mark members as static
-    int CountByteVector() => Unsafe.SizeOf<T>();
-#pragma warning restore CA1822 // Mark members as static
-    unsafe int ReadByteVector(int offset, Span<byte> destination)
+    public int CountByteVector() => Unsafe.SizeOf<T>();
+    public unsafe int ReadByteVector(int offset, Span<byte> destination)
     {
         var length = Math.Min(sizeof(T) - offset, destination.Length);
         fixed (void* p = &_data)
             new ReadOnlySpan<byte>((byte*)p + offset, length).CopyTo(destination);
         return length;
     }
-    unsafe void WriteByteVector(int offset, ReadOnlySpan<byte> source)
+    public unsafe void WriteByteVector(int offset, ReadOnlySpan<byte> source)
     {
         var count = Math.Min(sizeof(T) - offset, source.Length);
         fixed (void* p = &_data)
@@ -407,37 +365,44 @@ public sealed class Accessor<T> : IAccessor where T : unmanaged
 
 public sealed class DataRefRegistration : IDisposable
 {
-    public static DataRefRegistration Register<T>(string name, bool isWritable, Accessor<T> accessor) where T : unmanaged =>
+    public static DataRefRegistration Register<T>(ReadOnlySpan<byte> name, bool isWritable, Accessor<T> accessor) where T : unmanaged =>
         new(name, DataTypes.Data, isWritable, accessor);
+
+    public static DataRefRegistration Register<T>(string name, bool isWritable, Accessor<T> accessor) where T : unmanaged =>
+        new(Encoding.UTF8.GetBytes(name), DataTypes.Data, isWritable, accessor);
 
     public DataRef DataRef { get; }
 
     readonly GCHandle _handle;
 
-    public DataRefRegistration(string name, bool isWritable, IntAccessor accessor) :
+    public DataRefRegistration(ReadOnlySpan<byte> name, bool isWritable, IntAccessor accessor) :
         this(name, DataTypes.Int | DataTypes.Float | DataTypes.Double, isWritable, accessor)
     { }
 
-    public DataRefRegistration(string name, bool isWritable, FloatAccessor accessor) :
+    public DataRefRegistration(ReadOnlySpan<byte> name, bool isWritable, FloatAccessor accessor) :
         this(name, DataTypes.Float | DataTypes.Double, isWritable, accessor)
     { }
 
-    public DataRefRegistration(string name, bool isWritable, DoubleAccessor accessor) :
+    public DataRefRegistration(ReadOnlySpan<byte> name, bool isWritable, DoubleAccessor accessor) :
         this(name, DataTypes.Float | DataTypes.Double, isWritable, accessor)
     { }
 
-    public DataRefRegistration(string name, bool isWritable, IntArrayAccessor accessor) :
+    public DataRefRegistration(ReadOnlySpan<byte> name, bool isWritable, IntArrayAccessor accessor) :
        this(name, DataTypes.IntArray, isWritable, accessor)
     { }
 
-    public DataRefRegistration(string name, bool isWritable, FloatArrayAccessor accessor) :
+    public DataRefRegistration(ReadOnlySpan<byte> name, bool isWritable, FloatArrayAccessor accessor) :
         this(name, DataTypes.FloatArray, isWritable, accessor)
     { }
 
-    public unsafe DataRefRegistration(string name, DataTypes type, bool isWritable, IAccessor accessor)
+    public DataRefRegistration(ReadOnlySpan<byte> name, bool isWritable, DataAccessor accessor) :
+        this(name, DataTypes.Data, isWritable, accessor)
+    { }
+
+    public unsafe DataRefRegistration(ReadOnlySpan<byte> name, DataTypes type, bool isWritable, IAccessor accessor)
     {
         [DllImport(Defs.Lib)]
-        unsafe static extern nint XPLMRegisterDataAccessor([MarshalAs(UnmanagedType.LPUTF8Str)] string dataName, int dataType, int isWritable,
+        unsafe static extern nint XPLMRegisterDataAccessor(in byte dataName, DataTypes dataType, int isWritable,
             delegate* unmanaged<nint, int> readInt, delegate* unmanaged<nint, int, void> writeInt,
             delegate* unmanaged<nint, float> readFloat, delegate* unmanaged<nint, float, void> writeFloat,
             delegate* unmanaged<nint, double> readDouble, delegate* unmanaged<nint, double, void> writeDouble,
@@ -509,16 +474,44 @@ public sealed class DataRefRegistration : IDisposable
         var isFloatArray = type.HasFlag(DataTypes.FloatArray);
         var isData = type.HasFlag(DataTypes.Data);
         nint r = GCHandle.ToIntPtr(_handle = GCHandle.Alloc(accessor));
-        DataRef = new(XPLMRegisterDataAccessor(name, (int)type, isWritable ? 1 : 0,
+        DataRef = new(XPLMRegisterDataAccessor(in MemoryMarshal.AsRef<byte>(name), type, isWritable ? 1 : 0,
             isInt ? &ReadInt : null, isWritable && isInt ? &WriteInt : null,
             isFloat ? &ReadFloat : null, isWritable && isFloat ? &WriteFloat : null,
             isDouble ? &ReadDouble : null, isWritable && isDouble ? &WriteDouble : null,
             isIntArray ? &ReadIntVector : null, isWritable && isIntArray ? &WriteIntVector : null,
             isFloatArray ? &ReadFloatVector : null, isWritable && isFloatArray ? &WriteFloatVector : null,
             isData ? &ReadByteVector : null, isWritable && isData ? &WriteByteVector : null,
-            r, r
+            r, isWritable ? r : default
         ));
     }
+
+    public DataRefRegistration(string name, bool isWritable, IntAccessor accessor) :
+        this(Encoding.UTF8.GetBytes(name), isWritable, accessor)
+    { }
+
+    public DataRefRegistration(string name, bool isWritable, FloatAccessor accessor) :
+        this(Encoding.UTF8.GetBytes(name), isWritable, accessor)
+    { }
+
+    public DataRefRegistration(string name, bool isWritable, DoubleAccessor accessor) :
+        this(Encoding.UTF8.GetBytes(name), isWritable, accessor)
+    { }
+
+    public DataRefRegistration(string name, bool isWritable, IntArrayAccessor accessor) :
+       this(Encoding.UTF8.GetBytes(name), isWritable, accessor)
+    { }
+
+    public DataRefRegistration(string name, bool isWritable, FloatArrayAccessor accessor) :
+        this(Encoding.UTF8.GetBytes(name), isWritable, accessor)
+    { }
+
+    public DataRefRegistration(string name, bool isWritable, DataAccessor accessor) :
+        this(Encoding.UTF8.GetBytes(name), isWritable, accessor)
+    { }
+
+    public unsafe DataRefRegistration(string name, DataTypes type, bool isWritable, IAccessor accessor) :
+        this(Encoding.UTF8.GetBytes(name), type, isWritable, accessor)
+    { }
 
     ~DataRefRegistration() => Dispose();
 

@@ -4,7 +4,7 @@ P/Invoke for X-Plane plugin library manager
 ## Reference Packages
 `Microsoft.DotNet.ILCompiler` must be a top level dependency for native AOT:
 ```xml
-<PackageReference Include="FlyByWireless.XPLM" Version="1.0.6-*"/>
+<PackageReference Include="FlyByWireless.XPLM" Version="1.0.7-*"/>
 <PackageReference Include="Microsoft.DotNet.ILCompiler" Version="6.0.0-*"/>
 ```
 ## Implement
