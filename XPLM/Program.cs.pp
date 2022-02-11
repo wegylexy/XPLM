@@ -11,7 +11,7 @@ static class Program
     private static XPluginBase? _plugin;
 
     [UnmanagedCallersOnly(EntryPoint = "XPluginStart")]
-    private static int Start(ref byte name, ref byte signature, ref byte description)
+    private static unsafe int Start(byte* name, byte* signature, byte* description)
     {
 #if DEBUG
         Utilities.ErrorCallback = message =>
@@ -24,17 +24,17 @@ static class Program
         };
 #endif
 
-        static void StrCpy(ref byte u, string value)
+        static void StrCpy(byte* u, string value)
         {
-            var s = MemoryMarshal.CreateSpan(ref u, 256);
+            Span<byte> s = new(u, 256);
             s[Encoding.UTF8.GetBytes(value, s[..^1])] = 0;
         }
         try
         {
             _plugin = new $RootNamespace$.XPlugin();
-            StrCpy(ref name, _plugin.Name ?? "$AssemblyName$");
-            StrCpy(ref signature, _plugin.Signature ?? "$RootNamespace$");
-            StrCpy(ref description, _plugin.Description ?? "Built with FlyByWireless.XPLM");
+            StrCpy(name, _plugin.Name ?? "$AssemblyName$");
+            StrCpy(signature, _plugin.Signature ?? "$RootNamespace$");
+            StrCpy(description, _plugin.Description ?? "Built with FlyByWireless.XPLM");
             return 1;
         }
         catch (Exception ex)

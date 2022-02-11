@@ -120,7 +120,7 @@ public sealed class DataRef
         return i == 0 ? null : new(i);
     }
 
-    public static DataRef? Find(string name) => Find(Encoding.UTF8.GetBytes(name));
+    public static DataRef? Find(string name) => Find(Encoding.ASCII.GetBytes(name));
 
     internal readonly nint _id;
 
@@ -369,7 +369,7 @@ public sealed class DataRefRegistration : IDisposable
         new(name, DataTypes.Data, isWritable, accessor);
 
     public static DataRefRegistration Register<T>(string name, bool isWritable, Accessor<T> accessor) where T : unmanaged =>
-        new(Encoding.UTF8.GetBytes(name), DataTypes.Data, isWritable, accessor);
+        new(Encoding.ASCII.GetBytes(name), DataTypes.Data, isWritable, accessor);
 
     public DataRef DataRef { get; }
 
@@ -486,31 +486,31 @@ public sealed class DataRefRegistration : IDisposable
     }
 
     public DataRefRegistration(string name, bool isWritable, IntAccessor accessor) :
-        this(Encoding.UTF8.GetBytes(name), isWritable, accessor)
+        this(Encoding.ASCII.GetBytes(name), isWritable, accessor)
     { }
 
     public DataRefRegistration(string name, bool isWritable, FloatAccessor accessor) :
-        this(Encoding.UTF8.GetBytes(name), isWritable, accessor)
+        this(Encoding.ASCII.GetBytes(name), isWritable, accessor)
     { }
 
     public DataRefRegistration(string name, bool isWritable, DoubleAccessor accessor) :
-        this(Encoding.UTF8.GetBytes(name), isWritable, accessor)
+        this(Encoding.ASCII.GetBytes(name), isWritable, accessor)
     { }
 
     public DataRefRegistration(string name, bool isWritable, IntArrayAccessor accessor) :
-       this(Encoding.UTF8.GetBytes(name), isWritable, accessor)
+       this(Encoding.ASCII.GetBytes(name), isWritable, accessor)
     { }
 
     public DataRefRegistration(string name, bool isWritable, FloatArrayAccessor accessor) :
-        this(Encoding.UTF8.GetBytes(name), isWritable, accessor)
+        this(Encoding.ASCII.GetBytes(name), isWritable, accessor)
     { }
 
     public DataRefRegistration(string name, bool isWritable, DataAccessor accessor) :
-        this(Encoding.UTF8.GetBytes(name), isWritable, accessor)
+        this(Encoding.ASCII.GetBytes(name), isWritable, accessor)
     { }
 
     public unsafe DataRefRegistration(string name, DataTypes type, bool isWritable, IAccessor accessor) :
-        this(Encoding.UTF8.GetBytes(name), type, isWritable, accessor)
+        this(Encoding.ASCII.GetBytes(name), type, isWritable, accessor)
     { }
 
     ~DataRefRegistration() => Dispose();
@@ -536,7 +536,7 @@ public sealed class Shared : IDisposable
     public static unsafe bool TryShare(string name, DataTypes type, Action notification, out Shared share)
     {
         [DllImport(Defs.Lib)]
-        static extern unsafe int XPLMShareData([MarshalAs(UnmanagedType.LPUTF8Str)] string dataName, DataTypes dataType, delegate* unmanaged<nint, void> notification, nint handle);
+        static extern unsafe int XPLMShareData([MarshalAs(UnmanagedType.LPStr)] string dataName, DataTypes dataType, delegate* unmanaged<nint, void> notification, nint handle);
 
         var h = GCHandle.Alloc(notification);
         if (XPLMShareData(name, type, &Notify, GCHandle.ToIntPtr(h)) == 0)
@@ -565,7 +565,7 @@ public sealed class Shared : IDisposable
         if (!_disposed)
         {
             [DllImport(Defs.Lib)]
-            static extern unsafe void XPLMUnshareData([MarshalAs(UnmanagedType.LPUTF8Str)] string dataName, DataTypes dataType, delegate* unmanaged<nint, void> notification, nint handle);
+            static extern unsafe void XPLMUnshareData([MarshalAs(UnmanagedType.LPStr)] string dataName, DataTypes dataType, delegate* unmanaged<nint, void> notification, nint handle);
 
             XPLMUnshareData(Name, Type, &Notify, GCHandle.ToIntPtr(_handle));
             _handle.Free();

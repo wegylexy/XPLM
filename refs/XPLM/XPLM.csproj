@@ -3,7 +3,7 @@
 	<PropertyGroup>
 		<TargetFrameworks>net6.0</TargetFrameworks>
 		<AssemblyName>FlyByWireless.XPLM</AssemblyName>
-		<Version>1.0.0-alpha</Version>
+		<Version>1.0.8-beta</Version>
 		<Nullable>enable</Nullable>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<ImplicitUsings>enable</ImplicitUsings>

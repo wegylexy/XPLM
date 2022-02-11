@@ -3,12 +3,12 @@
 	<PropertyGroup>
 		<TargetFrameworks>net6.0</TargetFrameworks>
 		<AssemblyName>FlyByWireless.XPLM</AssemblyName>
-		<Version>1.0.7-alpha</Version>
+		<Version>1.0.8-beta</Version>
 		<Authors>WONG Tin Chi Timothy</Authors>
 		<Company>Timmy Net Net Company</Company>
 		<Product>P/Invoke for X-Plane plugin library manager</Product>
 		<PackageLicenseFile>LICENSE</PackageLicenseFile>
-		<Copyright>(C) 2021 WONG Tin Chi Timothy. All rights reserved.</Copyright>
+		<Copyright>(C) 2021-2022 WONG Tin Chi Timothy. All rights reserved.</Copyright>
 		<PackageProjectUrl>https://github.com/wegylexy/XPLM</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/wegylexy/XPLM</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
@@ -17,6 +17,7 @@
 		<Nullable>enable</Nullable>
 		<RootNamespace>FlyByWireless.XPLM</RootNamespace>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<ImplicitUsings>enable</ImplicitUsings>
 		<RuntimeIdentifiers>win-x64;osx-x64;linux-x64</RuntimeIdentifiers>
 		<ExtrasBuildEachRuntimeIdentifier>true</ExtrasBuildEachRuntimeIdentifier>
 		<ImplicitUsings>enable</ImplicitUsings>

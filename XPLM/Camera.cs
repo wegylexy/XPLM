@@ -1,5 +1,4 @@
-﻿using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 
 namespace FlyByWireless.XPLM;
 
@@ -27,14 +26,14 @@ public static class Camera
     public static unsafe void Control(CameraControlDuration howLong, CameraControl control)
     {
         [DllImport(Defs.Lib)]
-        static extern void XPLMControlCamera(CameraControlDuration howLong, delegate* unmanaged<ref CameraPosition, int, nint, int> control, nint state);
+        static extern void XPLMControlCamera(CameraControlDuration howLong, delegate* unmanaged<CameraPosition*, int, nint, int> control, nint state);
 
         [UnmanagedCallersOnly]
-        static int C(ref CameraPosition cameraPosition, int isLosingControl, nint state)
+        static int C(CameraPosition* cameraPosition, int isLosingControl, nint state)
         {
             var c = ((CameraControl)GCHandle.FromIntPtr(state).Target!)(out var position, isLosingControl != 0);
-            if (position.HasValue && !Unsafe.IsNullRef(ref cameraPosition))
-                cameraPosition = position!.Value;
+            if (position.HasValue && cameraPosition != null)
+                *cameraPosition = position!.Value;
             return c ? 1 : 0;
         }
 
