@@ -2,7 +2,7 @@
 
 	<PropertyGroup>
 		<RootNamespace>XplTemplate</RootNamespace>
-		<TargetFramework>net6.0</TargetFramework>
+		<TargetFramework>net8.0</TargetFramework>
 		<AssemblyName>XplTemplate</AssemblyName>
 		<Authors>WONG Tin Chi Timothy</Authors>
 		<Company>Timmy Net Net Company</Company>
@@ -14,11 +14,11 @@
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Version>1.0.8-beta</Version>
+		<PublishAot>true</PublishAot>
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="FlyByWireless.XPLM" Version="1.0.8-*" />
-		<PackageReference Include="Microsoft.DotNet.ILCompiler" Version="6.0.0-*" />
+	  <PackageReference Include="FlyByWireless.XPLM" Version="1.0.0-beta.9" />
 	</ItemGroup>
 
 </Project>

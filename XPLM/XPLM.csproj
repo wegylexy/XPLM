@@ -1,11 +1,11 @@
-﻿<Project Sdk="MSBuild.Sdk.Extras">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFrameworks>net6.0</TargetFrameworks>
+		<TargetFrameworks>net8.0</TargetFrameworks>
 		<AssemblyName>FlyByWireless.XPLM</AssemblyName>
-		<Version>1.0.8-beta</Version>
+		<Version>1.0.0-beta.9</Version>
 		<Authors>WONG Tin Chi Timothy</Authors>
-		<Company>Timmy Net Net Company</Company>
+		<Company>Timmy Wong Co.</Company>
 		<Product>P/Invoke for X-Plane plugin library manager</Product>
 		<PackageLicenseFile>LICENSE</PackageLicenseFile>
 		<Copyright>(C) 2021-2022 WONG Tin Chi Timothy. All rights reserved.</Copyright>
@@ -21,6 +21,7 @@
 		<RuntimeIdentifiers>win-x64;osx-x64;linux-x64</RuntimeIdentifiers>
 		<ExtrasBuildEachRuntimeIdentifier>true</ExtrasBuildEachRuntimeIdentifier>
 		<ImplicitUsings>enable</ImplicitUsings>
+		<IsAotCompatible>true</IsAotCompatible>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -38,7 +39,7 @@
 	<ItemGroup>
 		<Content Include="FlyByWireless.XPLM.props" PackagePath="build" />
 		<Content Include="FlyByWireless.XPLM.targets" PackagePath="build" />
-		<Content Include="Program.cs.pp" PackagePath="contentFiles/cs/net6.0" BuildAction="Compile" />
+		<Content Include="Program.cs.pp" PackagePath="contentFiles/cs/net8.0" BuildAction="Compile" />
 		<Content Include="SDK/**" PackagePath="build/SDK" />
 	</ItemGroup>
 
