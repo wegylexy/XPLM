@@ -3,7 +3,7 @@
 	<PropertyGroup>
 		<TargetFrameworks>net8.0</TargetFrameworks>
 		<AssemblyName>FlyByWireless.XPLM</AssemblyName>
-		<Version>1.0.0-beta.10</Version>
+		<Version>1.0.0-beta.11</Version>
 		<Authors>WONG Tin Chi Timothy</Authors>
 		<Company>Timmy Wong Co.</Company>
 		<Product>P/Invoke for X-Plane plugin library manager</Product>
@@ -41,6 +41,7 @@
 		<Content Include="FlyByWireless.XPLM.targets" PackagePath="build" />
 		<Content Include="Program.cs.pp" PackagePath="contentFiles/cs/net8.0" BuildAction="Compile" />
 		<Content Include="SDK/**" PackagePath="build/SDK" />
+		<Content Include="XPMP2-lib/**" PackagePath="build/XPMP2-lib" />
 	</ItemGroup>
 
 	<PropertyGroup Condition="$(RuntimeIdentifier.StartsWith('win'))">

@@ -5,7 +5,7 @@
 		<InvariantGlobalization>true</InvariantGlobalization>
 		<IlcGenerateStackTraceData>false</IlcGenerateStackTraceData>
 		<IlcDisableReflection>true</IlcDisableReflection>
-		<IlcOptimizationPreference>Speed</IlcOptimizationPreference>
+		<OptimizationPreference>Speed</OptimizationPreference>
 		<IlcFoldIdenticalMethodBodies>true</IlcFoldIdenticalMethodBodies>
 		<IlcDisableUnhandledExceptionExperience>true</IlcDisableUnhandledExceptionExperience>
 		<NativeLib>Shared</NativeLib>
@@ -14,20 +14,25 @@
 		<XplName Condition="$(RuntimeIdentifier.StartsWith('osx'))">mac.xpl</XplName>
 		<XplName Condition="$(RuntimeIdentifier.StartsWith('linux'))">lin.xpl</XplName>
 		<XPSDK>$(MSBuildThisFileDirectory)SDK/</XPSDK>
+		<XPMP2>$(MSBuildThisFileDirectory)XPMP2-lib/</XPMP2>
 	</PropertyGroup>
 
 	<ItemGroup Condition="$(RuntimeIdentifier.StartsWith('win'))">
 		<DirectPInvoke Include="XPLM_64" />
 		<DirectPInvoke Include="XPWidgets_64" />
+		<DirectPInvoke Include="XPMP2" />
 		<NativeLibrary Include="$(XPSDK)Libraries/Win/XPLM_64.lib" />
 		<NativeLibrary Include="$(XPSDK)Libraries/Win/XPWidgets_64.lib" />
+		<NativeLibrary Include="$(XPMP2)lib/win/XPMP2.lib" />
 	</ItemGroup>
 
 	<ItemGroup Condition="$(RuntimeIdentifier.StartsWith('osx'))">
 		<DirectPInvoke Include="XPLM" />
 		<DirectPInvoke Include="XPWidgets" />
+		<DirectPInvoke Include="XPMP2" />
 		<NativeLibrary Include="$(XPSDK)Libraries/Mac/XPLM.framework/XPLM" />
 		<NativeLibrary Include="$(XPSDK)Libraries/Mac/XPWidgets.framework/XPWidgets" />
+		<NativeLibrary Include="$(XPMP2)lib/XPMP2.framework/XPMP2" />
 	</ItemGroup>
 
 </Project>

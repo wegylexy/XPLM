@@ -29,11 +29,20 @@ public abstract class XPluginBase : IDisposable
     /// </summary>
     public XPluginBase() { }
 
+    ~XPluginBase() => Dispose(false);
+
     /// <summary>
     /// <para>Unregister any callbacks that can be unregistered, dispose of any objects or resources, and clean up all allocations done by the plugin.</para>
     /// See also <seealso href="https://developer.x-plane.com/article/developing-plugins/#XPluginStop">XPluginStop</seealso>
     /// </summary>
-    public abstract void Dispose();
+    /// <param name="isDisposing">Whether it is disposing or finalizing.</param>
+    protected virtual void Dispose(bool isDisposing) { }
+
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
 
     /// <summary>
     /// <para>This callback should be used to allocate any resources that the plugin maintains while enabled.</para>

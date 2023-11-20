@@ -45,7 +45,7 @@ sealed class XPlugin : XPluginBase
         });
     }
 
-    public override void Dispose()
+    protected override void Dispose(bool isDisposing)
     {
         // Example: unregisters my flight loop
         _myLoop.Dispose();
