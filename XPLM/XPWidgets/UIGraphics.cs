@@ -1,7 +1,7 @@
 ﻿using System.Drawing;
 using System.Runtime.InteropServices;
 
-namespace FlyByWireless.XPLM;
+namespace FlyByWireless.XPWidgets;
 
 public static partial class UIGraphics
 {

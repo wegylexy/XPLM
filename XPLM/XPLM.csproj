@@ -3,7 +3,7 @@
 	<PropertyGroup>
 		<TargetFrameworks>net8.0</TargetFrameworks>
 		<AssemblyName>FlyByWireless.XPLM</AssemblyName>
-		<Version>1.0.0-beta.9</Version>
+		<Version>1.0.0-beta.10</Version>
 		<Authors>WONG Tin Chi Timothy</Authors>
 		<Company>Timmy Wong Co.</Company>
 		<Product>P/Invoke for X-Plane plugin library manager</Product>

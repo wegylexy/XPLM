@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace FlyByWireless.XPLM;
 public static class PluginMessages
@@ -129,10 +130,10 @@ public static partial class Plugin
     public static PluginInfo? FindByPath(string path) =>
         GetInfo(XPLMFindPluginByPath(path));
 
-    [LibraryImport(Defs.Lib, StringMarshalling = StringMarshalling.Utf8)]
-    private static partial int XPLMFindPluginBySignature(string signature);
+    [LibraryImport(Defs.Lib)]
+    private static partial int XPLMFindPluginBySignature(ReadOnlySpan<byte> signature);
 
-    public static PluginInfo? FindBySignature(string signature) =>
+    public static PluginInfo? FindBySignature(ReadOnlySpan<byte> signature) =>
         GetInfo(XPLMFindPluginBySignature(signature));
 
     [LibraryImport(Defs.Lib)]
@@ -150,17 +151,17 @@ public static partial class Plugin
     public static void SendMessageTo(PluginInfo? plugin, int message, nint param = 0) =>
         XPLMSendMessageToPlugin(plugin?.ID ?? -1, message, param);
 
-    [LibraryImport(Defs.Lib, StringMarshalling = StringMarshalling.Utf8)]
-    private static partial int XPLMHasFeature(string feature);
+    [LibraryImport(Defs.Lib)]
+    private static partial int XPLMHasFeature(ReadOnlySpan<byte> feature);
 
-    public static bool TryGetFeature(string featurelity, [MaybeNullWhen(false)] out PluginFeature? feature)
+    public static bool TryGetFeature(ReadOnlySpan<byte> featurelity, [MaybeNullWhen(false)] out PluginFeature? feature)
     {
         if (XPLMHasFeature(featurelity) == 0)
         {
             feature = null;
             return false;
         }
-        feature = new(featurelity);
+        feature = new(Encoding.UTF8.GetString(featurelity));
         return true;
     }
 

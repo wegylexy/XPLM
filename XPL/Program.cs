@@ -7,7 +7,7 @@ namespace XplTemplate;
 sealed class XPlugin : XPluginBase
 {
     public override ReadOnlySpan<byte> Name => "Fly by Wireless"u8;
-    public override ReadOnlySpan<byte> Signature => "hk.timtim.flybywireless"u8;
+    public override ReadOnlySpan<byte> Signature => "tw.timmywong.flybywireless"u8;
     public override ReadOnlySpan<byte> Description => "X-Plane plugin library template."u8;
 
     readonly DataRef _overrideTcas;
@@ -22,26 +22,26 @@ sealed class XPlugin : XPluginBase
         }
 
         // Example: finds datarefs
-        _overrideTcas = DataRef.Find("sim/operation/override/override_TCAS")!;
+        _overrideTcas = DataRef.Find("sim/operation/override/override_TCAS"u8)!;
         DataRef
-            bearing = DataRef.Find("sim/cockpit2/tcas/indicators/relative_bearing_degs")!,
-            distance = DataRef.Find("sim/cockpit2/tcas/indicators/relative_distance_mtrs")!,
-            altitude = DataRef.Find("sim/cockpit2/tcas/indicators/relative_altitude_mtrs")!;
+            bearing = DataRef.Find("sim/cockpit2/tcas/indicators/relative_bearing_degs"u8)!,
+            distance = DataRef.Find("sim/cockpit2/tcas/indicators/relative_distance_mtrs"u8)!,
+            altitude = DataRef.Find("sim/cockpit2/tcas/indicators/relative_altitude_mtrs"u8)!;
 
         // Example: registers my flight loop
         _myLoop = new FlightLoop(FlightLoopPhase.AfterFlightModel, (elapsedSinceLastCall, elapsedTimeSinceLastFlightLoop, counter) =>
         {
-                // TODO: set number of planes
-                var count = 2;
+            // TODO: set number of planes
+            var count = 2;
             Span<float> values = stackalloc float[count];
-                // TODO: set bearings
-                bearing.AsFloatVector(0).Write(values);
-                // TODO: set distances
-                distance.AsFloatVector(0).Write(values);
-                // TODO: set altitudes
-                altitude.AsFloatVector(0).Write(values);
-                // Schedules for one second later
-                return 1;
+            // TODO: set bearings
+            bearing.AsFloatVector(0).Write(values);
+            // TODO: set distances
+            distance.AsFloatVector(0).Write(values);
+            // TODO: set altitudes
+            altitude.AsFloatVector(0).Write(values);
+            // Schedules for one second later
+            return 1;
         });
     }
 

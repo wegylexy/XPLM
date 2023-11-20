@@ -35,19 +35,19 @@ public delegate bool CommandCallback(Command command, CommandPhase phase);
 
 public sealed partial class Command : IDisposable
 {
-    [LibraryImport(Defs.Lib, StringMarshalling = StringMarshalling.Utf8)]
-    private static partial nint XPLMFindCommand(string name);
+    [LibraryImport(Defs.Lib)]
+    private static partial nint XPLMFindCommand(ReadOnlySpan<byte> name);
 
-    public static Command? Find(string name)
+    public static Command? Find(ReadOnlySpan<byte> name)
     {
         var i = XPLMFindCommand(name);
         return i == 0 ? null : new(i);
     }
 
-    [LibraryImport(Defs.Lib, StringMarshalling = StringMarshalling.Utf8)]
-    private static partial nint XPLMCreateCommand(string name, string description);
+    [LibraryImport(Defs.Lib)]
+    private static partial nint XPLMCreateCommand(ReadOnlySpan<byte> name, ReadOnlySpan<byte> description);
 
-    public static Command Create(string name, string description) =>
+    public static Command Create(ReadOnlySpan<byte> name, ReadOnlySpan<byte> description) =>
         new(XPLMCreateCommand(name, description));
 
     [LibraryImport(Defs.Lib)]
@@ -222,11 +222,13 @@ public static partial class Utilities
         }
     }
 
+#pragma warning disable CA1401 // P/Invokes should not be visible
     [LibraryImport(Defs.Lib, EntryPoint = "XPLMGetLanguage")]
     public static partial LanguageCode GetLanguage();
+#pragma warning restore CA1401 // P/Invokes should not be visible
 
-    [LibraryImport(Defs.Lib, EntryPoint = "XPLMFindSymbol", StringMarshalling = StringMarshalling.Utf8)]
-    public static partial nint FindSymbol(string symbol);
+    [LibraryImport(Defs.Lib, EntryPoint = "XPLMFindSymbol")]
+    public static partial nint FindSymbol(ReadOnlySpan<byte> symbol);
 
     [LibraryImport(Defs.Lib)]
     private static unsafe partial void XPLMSetErrorCallback(delegate* unmanaged<nint, void> callback);
@@ -263,6 +265,8 @@ public static partial class Utilities
     [LibraryImport(Defs.Lib, EntryPoint = "XPLMGetVirtualKeyDescription", StringMarshalling = StringMarshalling.Utf8)]
     public static partial string GetVirtualKeyDescription(VirtualKey virtualKey);
 
+#pragma warning disable CA1401 // P/Invokes should not be visible
     [LibraryImport(Defs.Lib, EntryPoint = "XPLMReloadScenery")]
     public static partial void ReloadScenery();
+#pragma warning restore CA1401 // P/Invokes should not be visible
 }

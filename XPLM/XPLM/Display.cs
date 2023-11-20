@@ -1,4 +1,4 @@
-﻿namespace FlyByWireless.XPLM.Display;
+﻿namespace FlyByWireless.XPLM;
 
 public enum CursorStatus
 {

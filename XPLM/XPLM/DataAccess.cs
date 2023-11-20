@@ -115,11 +115,8 @@ public sealed partial class DataRef
     [LibraryImport(Defs.Lib)]
     private static partial nint XPLMFindDataRef(in byte name);
 
-    public static DataRef? Find(ReadOnlySpan<byte> name)
-    {
-        var i = XPLMFindDataRef(in MemoryMarshal.AsRef<byte>(name));
-        return i == 0 ? null : new(i);
-    }
+    public static DataRef? Find(ReadOnlySpan<byte> name) =>
+        XPLMFindDataRef(in MemoryMarshal.AsRef<byte>(name)) is not 0 and var i ? new(i) : null;
 
     public static DataRef? Find(string name) => Find(Encoding.ASCII.GetBytes(name));
 
@@ -183,6 +180,22 @@ public sealed partial class DataRef
     public ByteVector AsByteVector(int offset = 0) => new(_id, offset);
 
     public Data<T> As<T>() where T : unmanaged => new(_id);
+
+    public string AsString
+    {
+        get
+        {
+            Span<byte> destination = stackalloc byte[ByteVector.XPLMGetDatab(_id, ref Unsafe.NullRef<byte>(), 0, 0)];
+            var read = ByteVector.XPLMGetDatab(_id, ref MemoryMarshal.GetReference(destination), 0, destination.Length);
+            Debug.Assert(read == destination.Length);
+            return Encoding.UTF8.GetString(destination);
+        }
+        set
+        {
+            var source = Encoding.UTF8.GetBytes(value);
+            ByteVector.XPLMSetDatab(_id, ref MemoryMarshal.GetReference(source.AsSpan()), 0, source.Length);
+        }
+    }
 
     internal DataRef(nint id) => _id = id;
 }
@@ -365,7 +378,7 @@ public sealed partial class DataRefRegistration : IDisposable
     { }
 
     [LibraryImport(Defs.Lib)]
-    private unsafe static partial nint XPLMRegisterDataAccessor(in byte dataName, DataTypes dataType, int isWritable,
+    private unsafe static partial nint XPLMRegisterDataAccessor(ReadOnlySpan<byte> dataName, DataTypes dataType, int isWritable,
         delegate* unmanaged<nint, int> readInt, delegate* unmanaged<nint, int, void> writeInt,
         delegate* unmanaged<nint, float> readFloat, delegate* unmanaged<nint, float, void> writeFloat,
         delegate* unmanaged<nint, double> readDouble, delegate* unmanaged<nint, double, void> writeDouble,
@@ -439,7 +452,7 @@ public sealed partial class DataRefRegistration : IDisposable
         var isFloatArray = type.HasFlag(DataTypes.FloatArray);
         var isData = type.HasFlag(DataTypes.Data);
         nint r = GCHandle.ToIntPtr(_handle = GCHandle.Alloc(accessor));
-        DataRef = new(XPLMRegisterDataAccessor(in MemoryMarshal.AsRef<byte>(name), type, isWritable ? 1 : 0,
+        DataRef = new(XPLMRegisterDataAccessor(name, type, isWritable ? 1 : 0,
             isInt ? &ReadInt : null, isWritable && isInt ? &WriteInt : null,
             isFloat ? &ReadFloat : null, isWritable && isFloat ? &WriteFloat : null,
             isDouble ? &ReadDouble : null, isWritable && isDouble ? &WriteDouble : null,

@@ -1,11 +1,10 @@
-﻿using FlyByWireless.XPLM.Display;
-using System.Collections;
+﻿using System.Collections;
 using System.Drawing;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace FlyByWireless.XPLM;
+namespace FlyByWireless.XPWidgets;
 
 [StructLayout(LayoutKind.Sequential)]
 public readonly struct MouseState
@@ -17,7 +16,7 @@ public readonly struct MouseState
 public readonly struct KeyState
 {
     public readonly byte Key;
-    public readonly KeyFlags Flags;
+    public readonly XPLM.KeyFlags Flags;
     public readonly byte VKey;
 }
 
@@ -107,25 +106,25 @@ public abstract partial class Widget : IDisposable
 
     public event Func<Widget, MouseState, bool>? MouseWheel;
 
-    public event Func<Widget, MouseState, CursorStatus, bool>? CursorAdjust;
+    public event Func<Widget, MouseState, XPLM.CursorStatus, bool>? CursorAdjust;
 
-    [LibraryImport(Defs.Lib, StringMarshalling = StringMarshalling.Utf8)]
-    private static partial nint XPCreateWidget(int left, int top, int right, int bottom, int visible, string descriptor, int isRoot, nint container, WidgetClass @class);
+    [LibraryImport(Defs.Lib)]
+    private static partial nint XPCreateWidget(int left, int top, int right, int bottom, int visible, ReadOnlySpan<byte> descriptor, int isRoot, nint container, WidgetClass @class);
 
     [LibraryImport(Defs.Lib)]
     private static unsafe partial void XPAddWidgetCallback(nint widget, delegate* unmanaged<WidgetMessage, nint, nint, nint, int> newCallback);
 
-    internal unsafe Widget(Rectangle rectangle, bool visible, string descriptor, Widget? container, WidgetClass @class)
+    internal unsafe Widget(Rectangle rectangle, bool visible, ReadOnlySpan<byte> descriptor, Widget? container, WidgetClass @class)
     {
         _id = XPCreateWidget(rectangle.Left, rectangle.Top, rectangle.Right, rectangle.Bottom, visible ? 1 : 0, descriptor, container == null ? 1 : 0, container?._id ?? 0, @class);
         _widgets.Add(_id, this);
         XPAddWidgetCallback(_id, &Callback);
     }
 
-    [LibraryImport(Defs.Lib, StringMarshalling = StringMarshalling.Utf8)]
-    private static unsafe partial nint XPCreateCustomWidget(int left, int top, int right, int bottom, int visible, string descriptor, int isRoot, nint container, delegate* unmanaged<WidgetMessage, nint, nint, nint, int> callback);
+    [LibraryImport(Defs.Lib)]
+    private static unsafe partial nint XPCreateCustomWidget(int left, int top, int right, int bottom, int visible, ReadOnlySpan<byte> descriptor, int isRoot, nint container, delegate* unmanaged<WidgetMessage, nint, nint, nint, int> callback);
 
-    public unsafe Widget(Rectangle rectangle, bool visible, string descriptor, Widget? container) =>
+    public unsafe Widget(Rectangle rectangle, bool visible, ReadOnlySpan<byte> descriptor, Widget? container) =>
         _widgets.Add(_id = XPCreateCustomWidget(rectangle.Left, rectangle.Top, rectangle.Right, rectangle.Bottom, visible ? 1 : 0, descriptor, container == null ? 1 : 0, container?._id ?? 0, &Callback), this);
 
     [LibraryImport(Defs.Lib)]
@@ -368,7 +367,7 @@ public abstract partial class Widget : IDisposable
             WidgetMessage.DescriptorChanged => DescriptorChanged?.Invoke(this),
             WidgetMessage.PropertyChanged => PropertyChanged?.Invoke(this, (int)param1, param2),
             WidgetMessage.MouseWheel => MouseWheel?.Invoke(this, Marshal.PtrToStructure<MouseState>(param1)),
-            WidgetMessage.CursorAdjust => CursorAdjust?.Invoke(this, Marshal.PtrToStructure<MouseState>(param1), (CursorStatus)param2),
+            WidgetMessage.CursorAdjust => CursorAdjust?.Invoke(this, Marshal.PtrToStructure<MouseState>(param1), (XPLM.CursorStatus)param2),
             _ => default,
         } is true;
     }

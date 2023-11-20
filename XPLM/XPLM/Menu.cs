@@ -35,10 +35,10 @@ public sealed partial class Menu : IDisposable
 
     internal Menu(nint id) => _id = id;
 
-    [LibraryImport(Defs.Lib, StringMarshalling = StringMarshalling.Utf8)]
-    private static unsafe partial nint XPLMCreateMenu(string name, nint parentMenu, int parentItem, delegate* unmanaged<nint, nint, void> handler, nint state);
+    [LibraryImport(Defs.Lib)]
+    private static unsafe partial nint XPLMCreateMenu(ReadOnlySpan<byte> name, nint parentMenu, int parentItem, delegate* unmanaged<nint, nint, void> handler, nint state);
 
-    public unsafe Menu(string name, Menu? parentMenu, int parentItem, Action<Menu, Item>? handler = null)
+    public unsafe Menu(ReadOnlySpan<byte> name, Menu? parentMenu, int parentItem, Action<Menu, Item>? handler = null)
     {
         _handle = GCHandle.Alloc(this);
         _handler = handler;
@@ -78,14 +78,14 @@ public sealed partial class Menu : IDisposable
         Clear();
     }
 
-    [LibraryImport(Defs.Lib, StringMarshalling = StringMarshalling.Utf8)]
-    private static partial int XPLMAppendMenuItem(nint menu, string itemName, nint item, int _);
+    [LibraryImport(Defs.Lib)]
+    private static partial int XPLMAppendMenuItem(nint menu, ReadOnlySpan<byte> itemName, nint item, int _);
 
-    [LibraryImport(Defs.Lib, StringMarshalling = StringMarshalling.Utf8)]
-    private static partial int XPLMAppendMenuItemWithCommand(nint menu, string itemName, nint commandToExecute);
+    [LibraryImport(Defs.Lib)]
+    private static partial int XPLMAppendMenuItemWithCommand(nint menu, ReadOnlySpan<byte> itemName, nint commandToExecute);
 
     internal List<Item?> _items = [];
-    public Item AppendItem(string name, Command? commandToExecute = null)
+    public Item AppendItem(ReadOnlySpan<byte> name, Command? commandToExecute = null)
     {
         Item m = new(this);
         var h = m._handle;

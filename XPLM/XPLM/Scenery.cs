@@ -155,6 +155,7 @@ public sealed partial class SceneryObject : IDisposable
 
 public static partial class Scenery
 {
+#pragma warning disable CA1401 // P/Invokes should not be visible
     [LibraryImport(Defs.Lib, EntryPoint = "XPLMGetMagneticVariation")]
     public static partial float GetMagneticVariation(double latitude, double longitude);
 
@@ -163,4 +164,5 @@ public static partial class Scenery
 
     [LibraryImport(Defs.Lib, EntryPoint = "XPLMDegMagneticToDegTrue")]
     public static partial float DegMagneticToDegTrue(float headingDegreesMagnetic);
+#pragma warning restore CA1401 // P/Invokes should not be visible
 }

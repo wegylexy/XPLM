@@ -1,7 +1,7 @@
 ﻿using System.Drawing;
 using System.Runtime.InteropServices;
 
-namespace FlyByWireless.XPLM.StandardWidgets;
+namespace FlyByWireless.XPWidgets;
 
 public enum MainWindowStyle
 {
@@ -9,7 +9,7 @@ public enum MainWindowStyle
     Translucent
 }
 
-public sealed partial class MainWindow(Rectangle rectangle, bool visible, string descriptor) :
+public sealed partial class MainWindow(Rectangle rectangle, bool visible, ReadOnlySpan<byte> descriptor) :
     Widget(rectangle, visible, descriptor, null, WidgetClass.MainWindow)
 {
     public event Func<MainWindow, bool>? CloseButtonPushed;
@@ -46,7 +46,7 @@ public enum SubWindowStyle
     ListView
 }
 
-public sealed class SubWindow(Rectangle rectangle, bool visible, string descriptor) :
+public sealed class SubWindow(Rectangle rectangle, bool visible, ReadOnlySpan<byte> descriptor) :
     Widget(rectangle, visible, descriptor, null, WidgetClass.SubWindow)
 {
     public SubWindowStyle Style
@@ -72,7 +72,7 @@ public enum ButtonBehavior
     RadioButton
 }
 
-public sealed class Button(Rectangle rectangle, bool visible, string descriptor) :
+public sealed class Button(Rectangle rectangle, bool visible, ReadOnlySpan<byte> descriptor) :
     Widget(rectangle, visible, descriptor, null, WidgetClass.Button)
 {
     public event Func<Button, bool>? Pressed;
@@ -112,7 +112,7 @@ public enum TextFieldStyle
     Translucent = 4
 }
 
-public sealed class TextField(Rectangle rectangle, bool visible, string descriptor) :
+public sealed class TextField(Rectangle rectangle, bool visible, ReadOnlySpan<byte> descriptor) :
     Widget(rectangle, visible, descriptor, null, WidgetClass.TextField)
 {
     public event Func<TextField, bool>? Changed;
@@ -159,9 +159,9 @@ public sealed class TextField(Rectangle rectangle, bool visible, string descript
         set => SetProperty(1406, value);
     }
 
-    public Text.FontID Font
+    public XPLM.Text.FontID Font
     {
-        get => (Text.FontID)GetProperty(1407, out _);
+        get => (XPLM.Text.FontID)GetProperty(1407, out _);
         set => SetProperty(1407, (nint)value);
     }
 
@@ -177,7 +177,7 @@ public enum ScrollBarStyle
     Slider
 }
 
-public sealed class ScrollBar(Rectangle rectangle, bool visible, string descriptor) :
+public sealed class ScrollBar(Rectangle rectangle, bool visible, ReadOnlySpan<byte> descriptor) :
     Widget(rectangle, visible, descriptor, null, WidgetClass.ScrollBar)
 {
     public event Func<ScrollBar, bool>? Changed;
@@ -218,7 +218,7 @@ public sealed class ScrollBar(Rectangle rectangle, bool visible, string descript
             base.Message(message, param1, param2);
 }
 
-public sealed class Caption(Rectangle rectangle, bool visible, string descriptor) :
+public sealed class Caption(Rectangle rectangle, bool visible, ReadOnlySpan<byte> descriptor) :
     Widget(rectangle, visible, descriptor, null, WidgetClass.Caption)
 {
     public bool Lit
@@ -251,7 +251,7 @@ public enum GeneralGraphicsStyle
     WayPoint
 }
 
-public sealed class GeneralGraphics(Rectangle rectangle, bool visible, string descriptor) :
+public sealed class GeneralGraphics(Rectangle rectangle, bool visible, ReadOnlySpan<byte> descriptor) :
     Widget(rectangle, visible, descriptor, null, WidgetClass.GeneralGraphics)
 {
     public GeneralGraphicsStyle Style
@@ -261,7 +261,7 @@ public sealed class GeneralGraphics(Rectangle rectangle, bool visible, string de
     }
 }
 
-public sealed class Progress(Rectangle rectangle, bool visible, string descriptor) :
+public sealed class Progress(Rectangle rectangle, bool visible, ReadOnlySpan<byte> descriptor) :
     Widget(rectangle, visible, descriptor, null, WidgetClass.Progress)
 {
     public int Position

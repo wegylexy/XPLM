@@ -1,24 +1,31 @@
 # FlyByWireless.XPLM
 P/Invoke for X-Plane plugin library manager
 
-## Reference Packages
-`Microsoft.DotNet.ILCompiler` must be a top level dependency for native AOT:
+## Project Setup
 ```xml
-<PackageReference Include="FlyByWireless.XPLM" Version="1.0.8-*"/>
-<PackageReference Include="Microsoft.DotNet.ILCompiler" Version="6.0.0-*"/>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PublishAot>true</PublishAot>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="FlyByWireless.XPLM" Version="1.0.0-*" />
+    </ItemGroup>
+</Project>
 ```
+
 ## Implement
 The plugin must implement `FlyByWireless.XPLM.XPluginBase` as `XPlugin` in its assembly root namespace:
 ```cs
 using FlyByWireless.XPLM;
+using FlyByWireless.XPWidgets;
 
 namespace XplTemplate;
 
 sealed class XPlugin : XPluginBase
 {
-    public override string? Name => "Fly by Wireless";
-    public override string? Signature => "hk.timtim.flybywireless";
-    public override string? Description => "X-Plane plugin library template.";
+    public override ReadOnlySpan<byte> Name => "Fly by Wireless"u8;
+    public override ReadOnlySpan<byte> Signature => "tw.timmywong.flybywireless"u8;
+    public override ReadOnlySpan<byte> Description => "X-Plane plugin library template."u8;
 
     public XPlugin() : base()
     {
