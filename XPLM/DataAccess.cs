@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -17,10 +18,10 @@ public enum DataTypes
     Data = 32
 }
 
-public sealed class IntVector
+public sealed partial class IntVector
 {
-    [DllImport(Defs.Lib)]
-    static extern int XPLMGetDatavi(nint handle, ref int values, int offset, int max);
+    [LibraryImport(Defs.Lib)]
+    private static partial int XPLMGetDatavi(nint handle, ref int values, int offset, int max);
 
     readonly nint _handle;
 
@@ -33,19 +34,19 @@ public sealed class IntVector
     public int Read(Span<int> destination) =>
         XPLMGetDatavi(_handle, ref MemoryMarshal.GetReference(destination), _offset, destination.Length);
 
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPLMSetDatavi(nint handle, ref int values, int offset, int count);
+
     public void Write(ReadOnlySpan<int> source)
     {
-        [DllImport(Defs.Lib)]
-        static extern void XPLMSetDatavi(nint handle, ref int values, int offset, int count);
-
         XPLMSetDatavi(_handle, ref MemoryMarshal.GetReference(source), _offset, source.Length);
     }
 }
 
-public sealed class FloatVector
+public sealed partial class FloatVector
 {
-    [DllImport(Defs.Lib)]
-    static extern int XPLMGetDatavf(nint handle, ref float values, int offset, int max);
+    [LibraryImport(Defs.Lib)]
+    private static partial int XPLMGetDatavf(nint handle, ref float values, int offset, int max);
 
     readonly nint _handle;
 
@@ -58,22 +59,22 @@ public sealed class FloatVector
     public int Read(Span<float> destination) =>
         XPLMGetDatavf(_handle, ref MemoryMarshal.GetReference(destination), _offset, destination.Length);
 
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPLMSetDatavf(nint handle, ref float values, int offset, int count);
+
     public void Write(ReadOnlySpan<float> source)
     {
-        [DllImport(Defs.Lib)]
-        static extern void XPLMSetDatavf(nint handle, ref float values, int offset, int count);
-
         XPLMSetDatavf(_handle, ref MemoryMarshal.GetReference(source), _offset, source.Length);
     }
 }
 
-public sealed class ByteVector
+public sealed partial class ByteVector
 {
-    [DllImport(Defs.Lib)]
-    internal static extern int XPLMGetDatab(nint handle, ref byte values, int offset, int max);
+    [LibraryImport(Defs.Lib)]
+    internal static partial int XPLMGetDatab(nint handle, ref byte values, int offset, int max);
 
-    [DllImport(Defs.Lib)]
-    internal static extern void XPLMSetDatab(nint handle, ref byte values, int offset, int count);
+    [LibraryImport(Defs.Lib)]
+    internal static partial void XPLMSetDatab(nint handle, ref byte values, int offset, int count);
 
     readonly nint _handle;
 
@@ -109,13 +110,13 @@ public sealed class Data<T> where T : unmanaged
     }
 }
 
-public sealed class DataRef
+public sealed partial class DataRef
 {
+    [LibraryImport(Defs.Lib)]
+    private static partial nint XPLMFindDataRef(in byte name);
+
     public static DataRef? Find(ReadOnlySpan<byte> name)
     {
-        [DllImport(Defs.Lib)]
-        static extern nint XPLMFindDataRef(in byte name);
-
         var i = XPLMFindDataRef(in MemoryMarshal.AsRef<byte>(name));
         return i == 0 ? null : new(i);
     }
@@ -124,91 +125,55 @@ public sealed class DataRef
 
     internal readonly nint _id;
 
-    public bool CanWrite
-    {
-        get
-        {
-            [DllImport(Defs.Lib)]
-            static extern int XPLMCanWriteDataRef(nint handle);
+    [LibraryImport(Defs.Lib)]
+    private static partial int XPLMCanWriteDataRef(nint handle);
 
-            return XPLMCanWriteDataRef(_id) != 0;
-        }
-    }
+    public bool CanWrite => XPLMCanWriteDataRef(_id) != 0;
 
-    public bool IsGood
-    {
-        get
-        {
-            [DllImport(Defs.Lib)]
-            static extern int XPLMIsDataRefGood(nint handle);
+    [LibraryImport(Defs.Lib)]
+    private static partial int XPLMIsDataRefGood(nint handle);
 
-            return XPLMIsDataRefGood(_id) != 0;
-        }
-    }
+    public bool IsGood => XPLMIsDataRefGood(_id) != 0;
 
-    public DataTypes Types
-    {
-        get
-        {
-            [DllImport(Defs.Lib)]
-            static extern int XPLMGetDataRefTypes(nint handle);
+    [LibraryImport(Defs.Lib)]
+    private static partial int XPLMGetDataRefTypes(nint handle);
 
-            return (DataTypes)XPLMGetDataRefTypes(_id);
-        }
-    }
+    public DataTypes Types => (DataTypes)XPLMGetDataRefTypes(_id);
+
+    [LibraryImport(Defs.Lib)]
+    private static partial int XPLMGetDatai(nint handle);
+
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPLMSetDatai(nint handle, int value);
 
     public int AsInt
     {
-        get
-        {
-            [DllImport(Defs.Lib)]
-            static extern int XPLMGetDatai(nint handle);
-
-            return XPLMGetDatai(_id);
-        }
-        set
-        {
-            [DllImport(Defs.Lib)]
-            static extern void XPLMSetDatai(nint handle, int value);
-
-            XPLMSetDatai(_id, value);
-        }
+        get => XPLMGetDatai(_id);
+        set => XPLMSetDatai(_id, value);
     }
+
+    [LibraryImport(Defs.Lib)]
+    private static partial float XPLMGetDataf(nint handle);
+
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPLMSetDataf(nint handle, float value);
 
     public float AsFloat
     {
-        get
-        {
-            [DllImport(Defs.Lib)]
-            static extern float XPLMGetDataf(nint handle);
-
-            return XPLMGetDataf(_id);
-        }
-        set
-        {
-            [DllImport(Defs.Lib)]
-            static extern void XPLMSetDataf(nint handle, float value);
-
-            XPLMSetDataf(_id, value);
-        }
+        get => XPLMGetDataf(_id);
+        set => XPLMSetDataf(_id, value);
     }
+
+    [LibraryImport(Defs.Lib)]
+    private static partial double XPLMGetDatad(nint handle);
+
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPLMSetDatad(nint handle, double value);
 
     public double AsDouble
     {
-        get
-        {
-            [DllImport(Defs.Lib)]
-            static extern double XPLMGetDatad(nint handle);
-
-            return XPLMGetDatad(_id);
-        }
-        set
-        {
-            [DllImport(Defs.Lib)]
-            static extern void XPLMSetDatad(nint handle, double value);
-
-            XPLMSetDatad(_id, value);
-        }
+        get => XPLMGetDatad(_id);
+        set => XPLMSetDatad(_id, value);
     }
 
     public IntVector AsIntVector(int offset = 0) => new(_id, offset);
@@ -268,12 +233,12 @@ public sealed class DoubleAccessor : IAccessor
 
 public sealed class IntArrayAccessor : IAccessor
 {
-    int[] _array = Array.Empty<int>();
+    int[] _array = [];
 
     public int[] IntArray
     {
         get => _array;
-        set => _array = value ?? Array.Empty<int>();
+        set => _array = value ?? [];
     }
 
     public int CountIntVector() => _array.Length;
@@ -292,12 +257,12 @@ public sealed class IntArrayAccessor : IAccessor
 
 public sealed class FloatArrayAccessor : IAccessor
 {
-    float[] _array = Array.Empty<float>();
+    float[] _array = [];
 
     public float[] FloatArray
     {
         get => _array;
-        set => _array = value ?? Array.Empty<float>();
+        set => _array = value ?? [];
     }
 
     public int CountFloatVector() => _array.Length;
@@ -316,12 +281,12 @@ public sealed class FloatArrayAccessor : IAccessor
 
 public sealed class DataAccessor : IAccessor
 {
-    byte[] _array = Array.Empty<byte>();
+    byte[] _array = [];
 
     public byte[] Data
     {
         get => _array;
-        set => _array = value ?? Array.Empty<byte>();
+        set => _array = value ?? [];
     }
 
     public int CountByteVector() => _array.Length;
@@ -363,7 +328,7 @@ public sealed class Accessor<T> : IAccessor where T : unmanaged
     }
 }
 
-public sealed class DataRefRegistration : IDisposable
+public sealed partial class DataRefRegistration : IDisposable
 {
     public static DataRefRegistration Register<T>(ReadOnlySpan<byte> name, bool isWritable, Accessor<T> accessor) where T : unmanaged =>
         new(name, DataTypes.Data, isWritable, accessor);
@@ -399,21 +364,21 @@ public sealed class DataRefRegistration : IDisposable
         this(name, DataTypes.Data, isWritable, accessor)
     { }
 
+    [LibraryImport(Defs.Lib)]
+    private unsafe static partial nint XPLMRegisterDataAccessor(in byte dataName, DataTypes dataType, int isWritable,
+        delegate* unmanaged<nint, int> readInt, delegate* unmanaged<nint, int, void> writeInt,
+        delegate* unmanaged<nint, float> readFloat, delegate* unmanaged<nint, float, void> writeFloat,
+        delegate* unmanaged<nint, double> readDouble, delegate* unmanaged<nint, double, void> writeDouble,
+        delegate* unmanaged<nint, int*, int, int, int> readIntVector,
+        delegate* unmanaged<nint, int*, int, int, void> writeIntVector,
+        delegate* unmanaged<nint, float*, int, int, int> readFloatVector,
+        delegate* unmanaged<nint, float*, int, int, void> writeFloatVector,
+        delegate* unmanaged<nint, byte*, int, int, int> readByteVector,
+        delegate* unmanaged<nint, byte*, int, int, void> writeByteVector,
+        nint readRefcon, nint writeRefcon);
+
     public unsafe DataRefRegistration(ReadOnlySpan<byte> name, DataTypes type, bool isWritable, IAccessor accessor)
     {
-        [DllImport(Defs.Lib)]
-        unsafe static extern nint XPLMRegisterDataAccessor(in byte dataName, DataTypes dataType, int isWritable,
-            delegate* unmanaged<nint, int> readInt, delegate* unmanaged<nint, int, void> writeInt,
-            delegate* unmanaged<nint, float> readFloat, delegate* unmanaged<nint, float, void> writeFloat,
-            delegate* unmanaged<nint, double> readDouble, delegate* unmanaged<nint, double, void> writeDouble,
-            delegate* unmanaged<nint, int*, int, int, int> readIntVector,
-            delegate* unmanaged<nint, int*, int, int, void> writeIntVector,
-            delegate* unmanaged<nint, float*, int, int, int> readFloatVector,
-            delegate* unmanaged<nint, float*, int, int, void> writeFloatVector,
-            delegate* unmanaged<nint, byte*, int, int, int> readByteVector,
-            delegate* unmanaged<nint, byte*, int, int, void> writeByteVector,
-            nint readRefcon, nint writeRefcon);
-
         static IAccessor A(nint handle) => (IAccessor)GCHandle.FromIntPtr(handle).Target!;
 
         [UnmanagedCallersOnly]
@@ -515,14 +480,14 @@ public sealed class DataRefRegistration : IDisposable
 
     ~DataRefRegistration() => Dispose();
 
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPLMUnregisterDataAccessor(nint dataRef);
+
     bool _disposed;
     public void Dispose()
     {
         if (!_disposed)
         {
-            [DllImport(Defs.Lib)]
-            static extern void XPLMUnregisterDataAccessor(nint dataRef);
-
             XPLMUnregisterDataAccessor(DataRef._id);
             _handle.Free();
             _disposed = true;
@@ -531,16 +496,19 @@ public sealed class DataRefRegistration : IDisposable
     }
 }
 
-public sealed class Shared : IDisposable
+public sealed partial class Shared : IDisposable
 {
-    public static unsafe bool TryShare(string name, DataTypes type, Action notification, out Shared share)
-    {
-        [DllImport(Defs.Lib)]
-        static extern unsafe int XPLMShareData([MarshalAs(UnmanagedType.LPStr)] string dataName, DataTypes dataType, delegate* unmanaged<nint, void> notification, nint handle);
+    [LibraryImport(Defs.Lib, StringMarshalling = StringMarshalling.Utf8)]
+    private static unsafe partial int XPLMShareData(string dataName, DataTypes dataType, delegate* unmanaged<nint, void> notification, nint handle);
 
+    public static unsafe bool TryShare(string name, DataTypes type, Action notification, [MaybeNullWhen(false)] out Shared? share)
+    {
         var h = GCHandle.Alloc(notification);
         if (XPLMShareData(name, type, &Notify, GCHandle.ToIntPtr(h)) == 0)
+        {
+            share = null;
             return false;
+        }
         share = new(name, type, h);
         return true;
     }
@@ -559,14 +527,14 @@ public sealed class Shared : IDisposable
 
     ~Shared() => Dispose();
 
+    [LibraryImport(Defs.Lib, StringMarshalling = StringMarshalling.Utf8)]
+    private static unsafe partial void XPLMUnshareData(string dataName, DataTypes dataType, delegate* unmanaged<nint, void> notification, nint handle);
+
     bool _disposed;
     public unsafe void Dispose()
     {
         if (!_disposed)
         {
-            [DllImport(Defs.Lib)]
-            static extern unsafe void XPLMUnshareData([MarshalAs(UnmanagedType.LPStr)] string dataName, DataTypes dataType, delegate* unmanaged<nint, void> notification, nint handle);
-
             XPLMUnshareData(Name, Type, &Notify, GCHandle.ToIntPtr(_handle));
             _handle.Free();
             _disposed = true;

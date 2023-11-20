@@ -19,15 +19,15 @@ public readonly struct CameraPosition
 
 public delegate bool CameraControl(out CameraPosition? cameraPosition, bool isLosingControl);
 
-public static class Camera
+public static partial class Camera
 {
     static GCHandle? _handle;
 
+    [LibraryImport(Defs.Lib)]
+    private static unsafe partial void XPLMControlCamera(CameraControlDuration howLong, delegate* unmanaged<CameraPosition*, int, nint, int> control, nint state);
+
     public static unsafe void Control(CameraControlDuration howLong, CameraControl control)
     {
-        [DllImport(Defs.Lib)]
-        static extern void XPLMControlCamera(CameraControlDuration howLong, delegate* unmanaged<CameraPosition*, int, nint, int> control, nint state);
-
         [UnmanagedCallersOnly]
         static int C(CameraPosition* cameraPosition, int isLosingControl, nint state)
         {
@@ -43,11 +43,11 @@ public static class Camera
         XPLMControlCamera(howLong, &C, GCHandle.ToIntPtr(_handle.Value));
     }
 
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPLMDontControlCamera();
+
     public static void DontControl()
     {
-        [DllImport(Defs.Lib)]
-        static extern void XPLMDontControlCamera();
-
         XPLMDontControlCamera();
         if (_handle.HasValue)
         {
@@ -56,24 +56,19 @@ public static class Camera
         }
     }
 
-    public static CameraControlDuration IsBeingControlled
-    {
-        get
-        {
-            [DllImport(Defs.Lib)]
-            static extern int XPLMIsCameraBeingControlled(out CameraControlDuration duration);
+    [LibraryImport(Defs.Lib)]
+    private static partial int XPLMIsCameraBeingControlled(out CameraControlDuration duration);
 
-            return XPLMIsCameraBeingControlled(out var duration) != 0 ? duration : default;
-        }
-    }
+    public static CameraControlDuration IsBeingControlled =>
+        XPLMIsCameraBeingControlled(out var duration) != 0 ? duration : default;
+
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPLMReadCameraPosition(out CameraPosition cameraPosition);
 
     public static CameraPosition Position
     {
         get
         {
-            [DllImport(Defs.Lib)]
-            static extern void XPLMReadCameraPosition(out CameraPosition cameraPosition);
-
             XPLMReadCameraPosition(out var position);
             return position;
         }

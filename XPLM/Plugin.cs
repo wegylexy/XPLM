@@ -1,4 +1,5 @@
 ﻿using System.Collections;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 
 namespace FlyByWireless.XPLM;
@@ -18,7 +19,7 @@ public static class PluginMessages
         ReleasePlanes = 111;
 }
 
-public sealed record PluginInfo
+public sealed partial record PluginInfo
 {
     public int ID { get; }
     public string Name { get; }
@@ -29,23 +30,20 @@ public sealed record PluginInfo
     internal PluginInfo(int id, string name, string filePath, string signature, string description) =>
         (ID, Name, FilePath, Signature, Description) = (id, name, filePath, signature, description);
 
+    [LibraryImport(Defs.Lib)]
+    private static partial int XPLMIsPluginEnabled(int id);
+
+    [LibraryImport(Defs.Lib)]
+    private static partial int XPLMEnablePlugin(int id);
+
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPLMDisablePlugin(int id);
+
     public bool IsEnabled
     {
-        get
-        {
-            [DllImport(Defs.Lib)]
-            static extern int XPLMIsPluginEnabled(int id);
-
-            return XPLMIsPluginEnabled(ID) != 0;
-        }
+        get => XPLMIsPluginEnabled(ID) != 0;
         set
         {
-            [DllImport(Defs.Lib)]
-            static extern int XPLMEnablePlugin(int id);
-
-            [DllImport(Defs.Lib)]
-            static extern void XPLMDisablePlugin(int id);
-
             if (value)
                 _ = XPLMEnablePlugin(ID);
             else
@@ -54,29 +52,17 @@ public sealed record PluginInfo
     }
 }
 
-sealed class PluginList : IReadOnlyList<PluginInfo>
+sealed partial class PluginList : IReadOnlyList<PluginInfo>
 {
-    public PluginInfo this[int index]
-    {
-        get
-        {
-            [DllImport(Defs.Lib)]
-            static extern int XPLMGetNthPlugin(int index);
+    [LibraryImport(Defs.Lib)]
+    private static partial int XPLMGetNthPlugin(int index);
 
-            return Plugin.GetInfo(XPLMGetNthPlugin(index))!;
-        }
-    }
+    public PluginInfo this[int index] => Plugin.GetInfo(XPLMGetNthPlugin(index))!;
 
-    public int Count
-    {
-        get
-        {
-            [DllImport(Defs.Lib)]
-            static extern int XPLMCountPlugins();
+    [LibraryImport(Defs.Lib)]
+    private static partial int XPLMCountPlugins();
 
-            return XPLMCountPlugins();
-        }
-    }
+    public int Count => XPLMCountPlugins();
 
     public IEnumerator<PluginInfo> GetEnumerator()
     {
@@ -87,51 +73,41 @@ sealed class PluginList : IReadOnlyList<PluginInfo>
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }
 
-public sealed record PluginFeature
+public sealed partial record PluginFeature
 {
     public string Feature { get; }
 
     internal PluginFeature(string feature) => Feature = feature;
 
+    [LibraryImport(Defs.Lib, StringMarshalling = StringMarshalling.Utf8)]
+    private static partial int XPLMIsFeatureEnabled(string feature);
+
+    [LibraryImport(Defs.Lib, StringMarshalling = StringMarshalling.Utf8)]
+    private static partial void XPLMEnableFeature(string feature, int enable);
+
     public bool IsEnabled
     {
-        get
-        {
-            [DllImport(Defs.Lib)]
-            static extern int XPLMIsFeatureEnabled([MarshalAs(UnmanagedType.LPUTF8Str)] string feature);
-
-            return XPLMIsFeatureEnabled(Feature) != 0;
-        }
-        set
-        {
-            [DllImport(Defs.Lib)]
-            static extern void XPLMEnableFeature([MarshalAs(UnmanagedType.LPUTF8Str)] string feature, int enable);
-
-            XPLMEnableFeature(Feature, value ? 1 : 0);
-        }
+        get => XPLMIsFeatureEnabled(Feature) != 0;
+        set => XPLMEnableFeature(Feature, value ? 1 : 0);
     }
 }
 
-public static class Plugin
+public static partial class Plugin
 {
-    public static int MyID
-    {
-        get
-        {
-            [DllImport(Defs.Lib)]
-            static extern int XPLMGetMyID();
+    [LibraryImport(Defs.Lib)]
+    private static partial int XPLMGetMyID();
 
-            return XPLMGetMyID();
-        }
-    }
+    public static int MyID => XPLMGetMyID();
+
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPLMGetPluginInfo(int id, in byte name, in byte filePath, in byte signature, in byte description);
 
     internal static PluginInfo? GetInfo(int id)
     {
-        [DllImport(Defs.Lib)]
-        static extern void XPLMGetPluginInfo(int id, in byte name, in byte filePath, in byte signature, in byte description);
-
         if (id == -1)
+        {
             return null;
+        }
         ReadOnlySpan<byte> name = stackalloc byte[256],
             filePath = stackalloc byte[256],
             signature = stackalloc byte[256],
@@ -147,62 +123,57 @@ public static class Plugin
 
     public static IReadOnlyList<PluginInfo> List { get; } = new PluginList();
 
-    public static PluginInfo? FindByPath(string path)
-    {
-        [DllImport(Defs.Lib)]
-        static extern int XPLMFindPluginByPath([MarshalAs(UnmanagedType.LPUTF8Str)] string path);
+    [LibraryImport(Defs.Lib, StringMarshalling = StringMarshalling.Utf8)]
+    private static partial int XPLMFindPluginByPath(string path);
 
-        return GetInfo(XPLMFindPluginByPath(path));
-    }
+    public static PluginInfo? FindByPath(string path) =>
+        GetInfo(XPLMFindPluginByPath(path));
 
-    public static PluginInfo? FindBySignature(string signature)
-    {
-        [DllImport(Defs.Lib)]
-        static extern int XPLMFindPluginBySignature([MarshalAs(UnmanagedType.LPUTF8Str)] string signature);
+    [LibraryImport(Defs.Lib, StringMarshalling = StringMarshalling.Utf8)]
+    private static partial int XPLMFindPluginBySignature(string signature);
 
-        return GetInfo(XPLMFindPluginBySignature(signature));
-    }
+    public static PluginInfo? FindBySignature(string signature) =>
+        GetInfo(XPLMFindPluginBySignature(signature));
 
-    public static void ReloadAll()
-    {
-        [DllImport(Defs.Lib)]
-        static extern void XPLMReloadPlugins();
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPLMReloadPlugins();
 
+    public static void ReloadAll() =>
         XPLMReloadPlugins();
-    }
 
     public static void BroadcastMessage(int message, nint param = 0) =>
         SendMessageTo(null, message, param);
 
-    public static void SendMessageTo(PluginInfo? plugin, int message, nint param = 0)
-    {
-        [DllImport(Defs.Lib)]
-        static extern void XPLMSendMessageToPlugin(int plugin, int message, nint param);
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPLMSendMessageToPlugin(int plugin, int message, nint param);
 
+    public static void SendMessageTo(PluginInfo? plugin, int message, nint param = 0) =>
         XPLMSendMessageToPlugin(plugin?.ID ?? -1, message, param);
-    }
 
-    public static bool TryGetFeature(string featurelity, out PluginFeature feature)
+    [LibraryImport(Defs.Lib, StringMarshalling = StringMarshalling.Utf8)]
+    private static partial int XPLMHasFeature(string feature);
+
+    public static bool TryGetFeature(string featurelity, [MaybeNullWhen(false)] out PluginFeature? feature)
     {
-        [DllImport(Defs.Lib)]
-        static extern int XPLMHasFeature([MarshalAs(UnmanagedType.LPUTF8Str)] string feature);
-
         if (XPLMHasFeature(featurelity) == 0)
+        {
+            feature = null;
             return false;
+        }
         feature = new(featurelity);
         return true;
     }
 
+    [LibraryImport(Defs.Lib)]
+    private static unsafe partial void XPLMEnumerateFeatures(delegate* unmanaged<nint, nint, void> enumerator, nint state);
+
     public static unsafe IEnumerable<PluginFeature> EnumerateFeatures()
     {
-        [DllImport(Defs.Lib)]
-        static extern unsafe void XPLMEnumerateFeatures(delegate* unmanaged<nint, nint, void> enumerator, nint state);
-
         [UnmanagedCallersOnly]
         static void Enumerate(nint feature, nint state) =>
             ((List<PluginFeature>)GCHandle.FromIntPtr(state).Target!).Add(new(Marshal.PtrToStringUTF8(feature)!));
 
-        List<PluginFeature> features = new();
+        List<PluginFeature> features = [];
         var h = GCHandle.Alloc(features);
         try
         {

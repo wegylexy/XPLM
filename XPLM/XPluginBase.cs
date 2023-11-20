@@ -9,19 +9,19 @@ public abstract class XPluginBase : IDisposable
     /// <para>Human-readable name of the plugin.</para>
     /// See also <seealso href="https://developer.x-plane.com/article/developing-plugins/#XPluginStart">XPluginStart</seealso>
     /// </summary>
-    public virtual string? Name => null;
+    public virtual ReadOnlySpan<byte> Name => null;
 
     /// <summary>
     /// <para>Globally unique signature of the plugin.</para>
     /// See also <seealso href="https://developer.x-plane.com/article/developing-plugins/#XPluginStart">XPluginStart</seealso>
     /// </summary>
-    public virtual string? Signature => null;
+    public virtual ReadOnlySpan<byte> Signature => null;
 
     /// <summary>
     /// <para>Human-readable description of the plugin.</para>
     /// See also <seealso href="https://developer.x-plane.com/article/developing-plugins/#XPluginStart">XPluginStart</seealso>
     /// </summary>
-    public virtual string? Description => "Built with FlyByWireless.XPLM";
+    public virtual ReadOnlySpan<byte> Description => "Built with FlyByWireless.XPLM"u8;
 
     /// <summary>
     /// <para>Do any initialization necessary for the plugin. This includes creating user interfaces, installing registered callbacks, allocating resources, etc.</para>

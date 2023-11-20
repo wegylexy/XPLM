@@ -33,30 +33,28 @@ public enum CommandPhase
 
 public delegate bool CommandCallback(Command command, CommandPhase phase);
 
-public sealed class Command : IDisposable
+public sealed partial class Command : IDisposable
 {
+    [LibraryImport(Defs.Lib, StringMarshalling = StringMarshalling.Utf8)]
+    private static partial nint XPLMFindCommand(string name);
+
     public static Command? Find(string name)
     {
-        [DllImport(Defs.Lib)]
-        static extern nint XPLMFindCommand([MarshalAs(UnmanagedType.LPUTF8Str)] string name);
-
         var i = XPLMFindCommand(name);
         return i == 0 ? null : new(i);
     }
 
-    public static Command Create(string name, string description)
-    {
-        [DllImport(Defs.Lib)]
-        static extern nint XPLMCreateCommand([MarshalAs(UnmanagedType.LPUTF8Str)] string name, [MarshalAs(UnmanagedType.LPUTF8Str)] string description);
+    [LibraryImport(Defs.Lib, StringMarshalling = StringMarshalling.Utf8)]
+    private static partial nint XPLMCreateCommand(string name, string description);
 
-        return new(XPLMCreateCommand(name, description));
-    }
+    public static Command Create(string name, string description) =>
+        new(XPLMCreateCommand(name, description));
 
-    [DllImport(Defs.Lib)]
-    static extern unsafe void XPLMRegisterCommandHandler(nint id, delegate* unmanaged<nint, CommandPhase, nint, int> handler, int before, nint state);
+    [LibraryImport(Defs.Lib)]
+    private static unsafe partial void XPLMRegisterCommandHandler(nint id, delegate* unmanaged<nint, CommandPhase, nint, int> handler, int before, nint state);
 
-    [DllImport(Defs.Lib)]
-    static extern unsafe void XPLMUnregisterCommandHandler(nint id, delegate* unmanaged<nint, CommandPhase, nint, int> handler, int before, nint state);
+    [LibraryImport(Defs.Lib)]
+    private static unsafe partial void XPLMUnregisterCommandHandler(nint id, delegate* unmanaged<nint, CommandPhase, nint, int> handler, int before, nint state);
 
     [UnmanagedCallersOnly]
     static int B(nint id, CommandPhase phase, nint state)
@@ -92,7 +90,7 @@ public sealed class Command : IDisposable
 
     readonly GCHandle _handle;
 
-    event CommandCallback? _Before, _After;
+    private event CommandCallback? _Before, _After;
 
     public unsafe event CommandCallback Before
     {
@@ -139,69 +137,55 @@ public sealed class Command : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    public void Begin()
-    {
-        [DllImport(Defs.Lib)]
-        static extern void XPLMCommandBegin(nint id);
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPLMCommandBegin(nint id);
 
-        XPLMCommandBegin(_id);
-    }
+    public void Begin() => XPLMCommandBegin(_id);
 
-    public void End()
-    {
-        [DllImport(Defs.Lib)]
-        static extern void XPLMCommandEnd(nint id);
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPLMCommandEnd(nint id);
 
-        XPLMCommandEnd(_id);
-    }
+    public void End() => XPLMCommandEnd(_id);
 
-    public void Once()
-    {
-        [DllImport(Defs.Lib)]
-        static extern void XPLMCommandOnce(nint id);
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPLMCommandOnce(nint id);
 
-        XPLMCommandOnce(_id);
-    }
+    public void Once() => XPLMCommandOnce(_id);
 }
 
-public static class Utilities
+public static partial class Utilities
 {
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPLMGetSystemPath(in byte systemPath);
+
     public static string SystemPath
     {
         get
         {
-            [DllImport(Defs.Lib)]
-            static extern void XPLMGetSystemPath(in byte systemPath);
-
             ReadOnlySpan<byte> s = stackalloc byte[512];
             XPLMGetSystemPath(in MemoryMarshal.GetReference(s));
             return s.GetString();
         }
     }
 
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPLMGetPrefsPath(in byte systemPath);
+
     public static string PrefsPath
     {
         get
         {
-            [DllImport(Defs.Lib)]
-            static extern void XPLMGetPrefsPath(in byte systemPath);
-
             ReadOnlySpan<byte> s = stackalloc byte[512];
             XPLMGetPrefsPath(in MemoryMarshal.GetReference(s));
             return s.GetString();
         }
     }
 
-    public static char DirectorySeparator
-    {
-        get
-        {
-            [DllImport(Defs.Lib)]
-            static extern ref byte XPLMGetDirectorySeparator();
+    [LibraryImport(Defs.Lib)]
+    private static unsafe partial byte* XPLMGetDirectorySeparator();
 
-            return (char)XPLMGetDirectorySeparator();
-        }
-    }
+    public static unsafe char DirectorySeparator =>
+        (char)*XPLMGetDirectorySeparator();
 
     public static string ExtractFileAndPath(ref string fullPath)
     {
@@ -214,61 +198,44 @@ public static class Utilities
     public static IEnumerable<string> EnumerateDirectoryContents(string directoryPath) =>
         Directory.EnumerateFiles(directoryPath);
 
-    public static bool LoadDataFile(DataFileType fileType, string? filePath)
-    {
-        [DllImport(Defs.Lib)]
-        static extern int XPLMLoadDataFile(DataFileType fileType, [MarshalAs(UnmanagedType.LPUTF8Str)] string? filePath);
+    [LibraryImport(Defs.Lib, StringMarshalling = StringMarshalling.Utf8)]
+    private static partial int XPLMLoadDataFile(DataFileType fileType, string? filePath);
 
-        return XPLMLoadDataFile(fileType, filePath) != 0;
-    }
+    public static bool LoadDataFile(DataFileType fileType, string? filePath) =>
+        XPLMLoadDataFile(fileType, filePath) != 0;
 
-    public static bool SaveDataFile(DataFileType fileType, string? filePath)
-    {
-        [DllImport(Defs.Lib)]
-        static extern int XPLMSaveDataFile(DataFileType fileType, [MarshalAs(UnmanagedType.LPUTF8Str)] string? filePath);
+    [LibraryImport(Defs.Lib, StringMarshalling = StringMarshalling.Utf8)]
+    private static partial int XPLMSaveDataFile(DataFileType fileType, string? filePath);
 
-        return XPLMSaveDataFile(fileType, filePath) != 0;
-    }
+    public static bool SaveDataFile(DataFileType fileType, string? filePath) =>
+        XPLMSaveDataFile(fileType, filePath) != 0;
+
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPLMGetVersions(out int xPlaneVersion, out int xplmVersion, out int hostID);
 
     public static (int XPlaneVersion, int XPLMVersion) Versions
     {
         get
         {
-            [DllImport(Defs.Lib)]
-            static extern void XPLMGetVersions(out int xPlaneVersion, out int xplmVersion, out int hostID);
-
             XPLMGetVersions(out var xPlane, out var xplm, out _);
             return (xPlane, xplm);
         }
     }
 
-    public static LanguageCode Language
-    {
-        get
-        {
-            [DllImport(Defs.Lib)]
-            static extern LanguageCode XPLMGetLanguage();
+    [LibraryImport(Defs.Lib, EntryPoint = "XPLMGetLanguage")]
+    public static partial LanguageCode GetLanguage();
 
-            return XPLMGetLanguage();
-        }
-    }
+    [LibraryImport(Defs.Lib, EntryPoint = "XPLMFindSymbol", StringMarshalling = StringMarshalling.Utf8)]
+    public static partial nint FindSymbol(string symbol);
 
-    public static nint FindSymbol(string symbol)
-    {
-        [DllImport(Defs.Lib)]
-        static extern nint XPLMFindSymbol([MarshalAs(UnmanagedType.LPUTF8Str)] string symbol);
-
-        return XPLMFindSymbol(symbol);
-    }
+    [LibraryImport(Defs.Lib)]
+    private static unsafe partial void XPLMSetErrorCallback(delegate* unmanaged<nint, void> callback);
 
     static Action<string>? _ErrorCallback;
     public static unsafe Action<string>? ErrorCallback
     {
         set
         {
-            [DllImport(Defs.Lib)]
-            static extern unsafe void XPLMSetErrorCallback(delegate* unmanaged<nint, void> callback);
-
             [UnmanagedCallersOnly]
             static void E(nint message)
             {
@@ -287,36 +254,15 @@ public static class Utilities
         }
     }
 
-    public static void DebugString(string debug)
-    {
-        [DllImport(Defs.Lib)]
-        static extern void XPLMDebugString([MarshalAs(UnmanagedType.LPUTF8Str)] string debug);
+    [LibraryImport(Defs.Lib, EntryPoint = "XPLMDebugString", StringMarshalling = StringMarshalling.Utf8)]
+    public static partial void DebugString(string debug);
 
-        XPLMDebugString(debug);
-    }
+    [LibraryImport(Defs.Lib, EntryPoint = "XPLMSpeakString", StringMarshalling = StringMarshalling.Utf8)]
+    public static partial void SpeakString(string debug);
 
-    public static void SpeakString(string speak)
-    {
-        [DllImport(Defs.Lib)]
-        static extern void XPLMSpeakString([MarshalAs(UnmanagedType.LPUTF8Str)] string debug);
+    [LibraryImport(Defs.Lib, EntryPoint = "XPLMGetVirtualKeyDescription", StringMarshalling = StringMarshalling.Utf8)]
+    public static partial string GetVirtualKeyDescription(VirtualKey virtualKey);
 
-        XPLMSpeakString(speak);
-    }
-
-    public static string GetVirtualKeyDescription(VirtualKey virtualKey)
-    {
-        [DllImport(Defs.Lib)]
-        [return: MarshalAs(UnmanagedType.LPUTF8Str)]
-        static extern string XPLMGetVirtualKeyDescription(VirtualKey virtualKey);
-
-        return XPLMGetVirtualKeyDescription(virtualKey);
-    }
-
-    public static void ReloadScenery()
-    {
-        [DllImport(Defs.Lib)]
-        static extern void XPLMReloadScenery();
-
-        XPLMReloadScenery();
-    }
+    [LibraryImport(Defs.Lib, EntryPoint = "XPLMReloadScenery")]
+    public static partial void ReloadScenery();
 }

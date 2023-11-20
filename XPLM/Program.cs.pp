@@ -24,17 +24,18 @@ static class Program
         };
 #endif
 
-        static void StrCpy(byte* u, string value)
+        static void StrCpy(byte* u, ReadOnlySpan<byte> value)
         {
             Span<byte> s = new(u, 256);
-            s[Encoding.UTF8.GetBytes(value, s[..^1])] = 0;
+            value.CopyTo(s);
+            s[value.Length] = 0;
         }
         try
         {
             _plugin = new $RootNamespace$.XPlugin();
-            StrCpy(name, _plugin.Name ?? "$AssemblyName$");
-            StrCpy(signature, _plugin.Signature ?? "$RootNamespace$");
-            StrCpy(description, _plugin.Description ?? "Built with FlyByWireless.XPLM");
+            StrCpy(name, _plugin.Name is { Length: > 0 } _name ? _name : "$AssemblyName$"u8);
+            StrCpy(signature, _plugin.Signature is { Length: > 0 } _signature ? _signature : "$RootNamespace$"u8);
+            StrCpy(description, _plugin.Description is { Length: > 0 } _description ? _description : "Built with FlyByWireless.XPLM"u8);
             return 1;
         }
         catch (Exception ex)

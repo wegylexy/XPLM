@@ -25,15 +25,15 @@ public readonly struct ProbeInfo
     public bool IsWet => _IsWet != 0;
 }
 
-public sealed class Probe : IDisposable
+public sealed partial class Probe : IDisposable
 {
     readonly nint _id;
 
+    [LibraryImport(Defs.Lib)]
+    private static partial nint XPLMCreateProbe(ProbeType probeType);
+
     public Probe(ProbeType probeType)
     {
-        [DllImport(Defs.Lib)]
-        static extern nint XPLMCreateProbe(ProbeType probeType);
-
         _id = XPLMCreateProbe(probeType);
     }
 
@@ -42,7 +42,7 @@ public sealed class Probe : IDisposable
     bool _disposed;
     public void Dispose()
     {
-        [DllImport(Defs.Lib)]
+        [LibraryImport(Defs.Lib)]
         static extern void XPLMDestroyProbe(nint id);
 
         if (!_disposed)
@@ -53,11 +53,11 @@ public sealed class Probe : IDisposable
         GC.SuppressFinalize(this);
     }
 
+    [LibraryImport(Defs.Lib)]
+    private static partial ProbeResult XPLMProbeTerrainXYZ(nint id, float x, float y, float z, ref ProbeInfo info);
+
     public unsafe ProbeResult TerrainXYZ(float x, float y, float z, out ProbeInfo info)
     {
-        [DllImport(Defs.Lib)]
-        static extern ProbeResult XPLMProbeTerrainXYZ(nint id, float x, float y, float z, ref ProbeInfo info);
-
         fixed (void* p = &info)
         {
             *(int*)p = sizeof(ProbeInfo);
@@ -66,8 +66,11 @@ public sealed class Probe : IDisposable
     }
 }
 
-public sealed class SceneryObject : IDisposable
+public sealed partial class SceneryObject : IDisposable
 {
+    [LibraryImport(Defs.Lib, StringMarshalling = StringMarshalling.Utf8)]
+    private static unsafe partial void XPLMLoadObjectAsync(string path, delegate* unmanaged<nint, nint, void> callback, nint state);
+
     public static async Task<SceneryObject> LoadAsync(string path)
     {
         TaskCompletionSource<SceneryObject> tcs = new();
@@ -76,9 +79,6 @@ public sealed class SceneryObject : IDisposable
         {
             unsafe
             {
-                [DllImport(Defs.Lib)]
-                static extern unsafe void XPLMLoadObjectAsync([MarshalAs(UnmanagedType.LPUTF8Str)] string path, delegate* unmanaged<nint, nint, void> callback, nint state);
-
                 [UnmanagedCallersOnly]
                 static void L(nint id, nint state)
                 {
@@ -104,16 +104,16 @@ public sealed class SceneryObject : IDisposable
         return tcs.Task.Result;
     }
 
+    [LibraryImport(Defs.Lib, StringMarshalling = StringMarshalling.Utf8)]
+    private static unsafe partial int XPLMLookupObjects(string path, float latitude, float longitude, delegate* unmanaged<nint, nint, void> enumerator, nint state);
+
     public static unsafe IEnumerable<string> Lookup(string path, float latitude, float longitude)
     {
-        [DllImport(Defs.Lib)]
-        static extern unsafe int XPLMLookupObjects([MarshalAs(UnmanagedType.LPUTF8Str)] string path, float latitude, float longitude, delegate* unmanaged<nint, nint, void> enumerator, nint state);
-
         [UnmanagedCallersOnly]
         static void E(nint filePath, nint state) =>
             ((List<string>)GCHandle.FromIntPtr(state).Target!).Add(Marshal.PtrToStringUTF8(filePath)!);
 
-        List<string> s = new();
+        List<string> s = [];
         var h = GCHandle.Alloc(s);
         _ = XPLMLookupObjects(path, latitude, longitude, &E, GCHandle.ToIntPtr(h));
         h.Free();
@@ -124,11 +124,11 @@ public sealed class SceneryObject : IDisposable
 
     SceneryObject(nint id) => _id = id;
 
+    [LibraryImport(Defs.Lib, StringMarshalling = StringMarshalling.Utf8)]
+    private static partial nint XPLMLoadObject(string path);
+
     public SceneryObject(string path)
     {
-        [DllImport(Defs.Lib)]
-        static extern nint XPLMLoadObject([MarshalAs(UnmanagedType.LPUTF8Str)] string path);
-
         _id = XPLMLoadObject(path);
         if (_id == 0)
         {
@@ -138,14 +138,14 @@ public sealed class SceneryObject : IDisposable
 
     ~SceneryObject() => Dispose();
 
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPLMUnloadObject(nint id);
+
     bool _disposed;
     public void Dispose()
     {
         if (!_disposed)
         {
-            [DllImport(Defs.Lib)]
-            static extern void XPLMUnloadObject(nint id);
-
             XPLMUnloadObject(_id);
             _disposed = true;
         }
@@ -153,29 +153,14 @@ public sealed class SceneryObject : IDisposable
     }
 }
 
-public static class Scenery
+public static partial class Scenery
 {
-    public static float GetMagneticVariation(double latitude, double longitude)
-    {
-        [DllImport(Defs.Lib)]
-        static extern float XPLMGetMagneticVariation(double latitude, double longitude);
+    [LibraryImport(Defs.Lib, EntryPoint = "XPLMGetMagneticVariation")]
+    public static partial float GetMagneticVariation(double latitude, double longitude);
 
-        return XPLMGetMagneticVariation(latitude, longitude);
-    }
+    [LibraryImport(Defs.Lib, EntryPoint = "XPLMDegTrueToDegMagnetic")]
+    public static partial float DegTrueToDegMagnetic(float headingDegreesTrue);
 
-    public static float DegTrueToDegMagnetic(float headingDegreesTrue)
-    {
-        [DllImport(Defs.Lib)]
-        static extern float XPLMDegTrueToDegMagnetic(float headingDegreesTrue);
-
-        return XPLMDegTrueToDegMagnetic(headingDegreesTrue);
-    }
-
-    public static float DegMagneticToDegTrue(float headingDegreesMagnetic)
-    {
-        [DllImport(Defs.Lib)]
-        static extern float XPLMDegMagneticToDegTrue(float headingDegreesMagnetic);
-
-        return XPLMDegMagneticToDegTrue(headingDegreesMagnetic);
-    }
+    [LibraryImport(Defs.Lib, EntryPoint = "XPLMDegMagneticToDegTrue")]
+    public static partial float DegMagneticToDegTrue(float headingDegreesMagnetic);
 }

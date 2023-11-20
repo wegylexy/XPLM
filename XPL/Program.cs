@@ -6,9 +6,9 @@ namespace XplTemplate;
 
 sealed class XPlugin : XPluginBase
 {
-    public override string? Name => "Fly by Wireless";
-    public override string? Signature => "hk.timtim.flybywireless";
-    public override string? Description => "X-Plane plugin library template.";
+    public override ReadOnlySpan<byte> Name => "Fly by Wireless"u8;
+    public override ReadOnlySpan<byte> Signature => "hk.timtim.flybywireless"u8;
+    public override ReadOnlySpan<byte> Description => "X-Plane plugin library template."u8;
 
     readonly DataRef _overrideTcas;
     readonly FlightLoop _myLoop;

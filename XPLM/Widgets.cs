@@ -68,7 +68,7 @@ public enum WidgetMessage
     UserStart = 10000
 }
 
-public abstract class Widget : IDisposable
+public abstract partial class Widget : IDisposable
 {
     internal enum WidgetClass
     {
@@ -82,7 +82,7 @@ public abstract class Widget : IDisposable
         Progress
     }
 
-    static readonly Dictionary<nint, Widget> _widgets = new();
+    static readonly Dictionary<nint, Widget> _widgets = [];
 
     protected readonly nint _id;
     bool _disposed;
@@ -109,34 +109,32 @@ public abstract class Widget : IDisposable
 
     public event Func<Widget, MouseState, CursorStatus, bool>? CursorAdjust;
 
+    [LibraryImport(Defs.Lib, StringMarshalling = StringMarshalling.Utf8)]
+    private static partial nint XPCreateWidget(int left, int top, int right, int bottom, int visible, string descriptor, int isRoot, nint container, WidgetClass @class);
+
+    [LibraryImport(Defs.Lib)]
+    private static unsafe partial void XPAddWidgetCallback(nint widget, delegate* unmanaged<WidgetMessage, nint, nint, nint, int> newCallback);
+
     internal unsafe Widget(Rectangle rectangle, bool visible, string descriptor, Widget? container, WidgetClass @class)
     {
-        [DllImport(Defs.Lib)]
-        static extern nint XPCreateWidget(int left, int top, int right, int bottom, int visible, [MarshalAs(UnmanagedType.LPUTF8Str)] string descriptor, int isRoot, nint container, WidgetClass @class);
-
-        [DllImport(Defs.Lib)]
-        static extern void XPAddWidgetCallback(nint widget, delegate* unmanaged<WidgetMessage, nint, nint, nint, int> newCallback);
-
         _id = XPCreateWidget(rectangle.Left, rectangle.Top, rectangle.Right, rectangle.Bottom, visible ? 1 : 0, descriptor, container == null ? 1 : 0, container?._id ?? 0, @class);
         _widgets.Add(_id, this);
         XPAddWidgetCallback(_id, &Callback);
     }
 
-    public unsafe Widget(Rectangle rectangle, bool visible, string descriptor, Widget? container)
-    {
-        [DllImport(Defs.Lib)]
-        static extern nint XPCreateCustomWidget(int left, int top, int right, int bottom, int visible, [MarshalAs(UnmanagedType.LPUTF8Str)] string descriptor, int isRoot, nint container, delegate* unmanaged<WidgetMessage, nint, nint, nint, int> callback);
+    [LibraryImport(Defs.Lib, StringMarshalling = StringMarshalling.Utf8)]
+    private static unsafe partial nint XPCreateCustomWidget(int left, int top, int right, int bottom, int visible, string descriptor, int isRoot, nint container, delegate* unmanaged<WidgetMessage, nint, nint, nint, int> callback);
 
+    public unsafe Widget(Rectangle rectangle, bool visible, string descriptor, Widget? container) =>
         _widgets.Add(_id = XPCreateCustomWidget(rectangle.Left, rectangle.Top, rectangle.Right, rectangle.Bottom, visible ? 1 : 0, descriptor, container == null ? 1 : 0, container?._id ?? 0, &Callback), this);
-    }
+
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPDestroyWidget(nint id, int destroyChildren);
 
     protected virtual void Destroy()
     {
         if (!_disposed)
         {
-            [DllImport(Defs.Lib)]
-            static extern void XPDestroyWidget(nint id, int destroyChildren);
-
             XPDestroyWidget(_id, 0);
             _ = _widgets.Remove(_id);
             _disposed = true;
@@ -151,56 +149,32 @@ public abstract class Widget : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    public bool SendMessage(WidgetMessage message, DispatchMode mode, nint param1, nint param2)
-    {
-        [DllImport(Defs.Lib)]
-        static extern int XPSendMessageToWidget(nint widget, WidgetMessage message, DispatchMode mode, nint param1, nint param2);
+    [LibraryImport(Defs.Lib)]
+    private static partial int XPSendMessageToWidget(nint widget, WidgetMessage message, DispatchMode mode, nint param1, nint param2);
 
-        return XPSendMessageToWidget(_id, message, mode, param1, param2) != 0;
-    }
+    public bool SendMessage(WidgetMessage message, DispatchMode mode, nint param1, nint param2) =>
+        XPSendMessageToWidget(_id, message, mode, param1, param2) != 0;
 
-    public void PlaceWithin(Widget? container)
-    {
-        [DllImport(Defs.Lib)]
-        static extern void XPPlaceWidgetWithin(nint subWidget, nint container);
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPPlaceWidgetWithin(nint subWidget, nint container);
 
+    public void PlaceWithin(Widget? container) =>
         XPPlaceWidgetWithin(_id, container?._id ?? 0);
-    }
 
-    class ChildList : IReadOnlyList<Widget>
+    partial class ChildList(Widget of) : IReadOnlyList<Widget>
     {
-        readonly Widget _of;
+        readonly Widget _of = of;
 
-        public ChildList(Widget of) => _of = of;
+        [LibraryImport(Defs.Lib)]
+        private static partial nint XPGetNthChildWidget(nint widget, int index);
 
-        public Widget this[int index]
-        {
-            get
-            {
-                [DllImport(Defs.Lib)]
-                static extern nint XPGetNthChildWidget(nint widget, int index);
+        public Widget this[int index] =>
+            _widgets.TryGetValue(XPGetNthChildWidget(_of._id, index), out var w) ? w : throw new IndexOutOfRangeException();
 
-                if (_widgets.TryGetValue(XPGetNthChildWidget(_of._id, index), out var w))
-                {
-                    return w;
-                }
-                else
-                {
-                    throw new IndexOutOfRangeException();
-                }
-            }
-        }
+        [LibraryImport(Defs.Lib)]
+        private static partial int XPCountChildWidgets(nint widget);
 
-        public int Count
-        {
-            get
-            {
-                [DllImport(Defs.Lib)]
-                static extern int XPCountChildWidgets(nint widget);
-
-                return XPCountChildWidgets(_of._id);
-            }
-        }
+        public int Count => XPCountChildWidgets(_of._id);
 
         public IEnumerator<Widget> GetEnumerator()
         {
@@ -216,127 +190,86 @@ public abstract class Widget : IDisposable
     IReadOnlyList<Widget>? _Children;
     public IReadOnlyList<Widget> Children => _Children ??= new ChildList(this);
 
-    public Widget? Parent
-    {
-        get
-        {
-            [DllImport(Defs.Lib)]
-            static extern nint XPGetParentWidget(nint widget);
+    [LibraryImport(Defs.Lib)]
+    private static partial nint XPGetParentWidget(nint widget);
 
-            return XPGetParentWidget(_id) is not 0 and var p ? _widgets[p] : null;
-        }
-    }
+    public Widget? Parent => XPGetParentWidget(_id) is not 0 and var p ? _widgets[p] : null;
 
-    public void Show()
-    {
-        [DllImport(Defs.Lib)]
-        static extern void XPShowWidget(nint widget);
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPShowWidget(nint widget);
 
-        XPShowWidget(_id);
-    }
+    public void Show() => XPShowWidget(_id);
 
-    public void Hide()
-    {
-        [DllImport(Defs.Lib)]
-        static extern void XPHideWidget(nint widget);
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPHideWidget(nint widget);
 
-        XPHideWidget(_id);
-    }
+    public void Hide() => XPHideWidget(_id);
 
-    public bool IsVisible
-    {
-        get
-        {
-            [DllImport(Defs.Lib)]
-            static extern int XPIsWidgetVisible(nint widget);
+    [LibraryImport(Defs.Lib)]
+    private static partial int XPIsWidgetVisible(nint widget);
 
-            return XPIsWidgetVisible(_id) != 0;
-        }
-    }
+    public bool IsVisible => XPIsWidgetVisible(_id) != 0;
 
-    public Widget? Root
-    {
-        get
-        {
-            [DllImport(Defs.Lib)]
-            static extern nint XPFindRootWidget(nint widget);
+    [LibraryImport(Defs.Lib)]
+    private static partial nint XPFindRootWidget(nint widget);
 
-            return XPFindRootWidget(_id) is not 0 and var p ? _widgets[p] : null;
-        }
-    }
+    public Widget? Root => XPFindRootWidget(_id) is not 0 and var p ? _widgets[p] : null;
 
-    public void BringRootToFront()
-    {
-        [DllImport(Defs.Lib)]
-        static extern void XPBringRootWidgetToFront(nint widget);
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPBringRootWidgetToFront(nint widget);
 
-        XPBringRootWidgetToFront(_id);
-    }
+    public void BringRootToFront() => XPBringRootWidgetToFront(_id);
 
-    public bool IsInFront
-    {
-        get
-        {
-            [DllImport(Defs.Lib)]
-            static extern int XPIsWidgetInFront(nint widget);
+    [LibraryImport(Defs.Lib)]
+    private static partial int XPIsWidgetInFront(nint widget);
 
-            return XPIsWidgetInFront(_id) != 0;
-        }
-    }
+    public bool IsInFront => XPIsWidgetInFront(_id) != 0;
+
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPGetWidgetGeometry(nint widget, out int left, out int top, out int right, out int bottom);
+
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPSetWidgetGeometry(nint widget, int left, int top, int right, int bottom);
 
     public Rectangle Geometry
     {
         get
         {
-            [DllImport(Defs.Lib)]
-            static extern void XPGetWidgetGeometry(nint widget, out int left, out int top, out int right, out int bottom);
-
             XPGetWidgetGeometry(_id, out var left, out var top, out var right, out var bottom);
             return new(left, top, right - left, bottom - top);
         }
-        set
-        {
-            [DllImport(Defs.Lib)]
-            static extern void XPSetWidgetGeometry(nint widget, int left, int top, int right, int bottom);
-
-            XPSetWidgetGeometry(_id, value.Left, value.Top, value.Right, value.Bottom);
-        }
+        set => XPSetWidgetGeometry(_id, value.Left, value.Top, value.Right, value.Bottom);
     }
 
-    public Widget? GetWidgetForLocation(Point offset, bool recursive, bool visibleOnly)
-    {
-        [DllImport(Defs.Lib)]
-        static extern nint XPGetWidgetForLocation(nint container, int xOffset, int yOffset, int recursive, int visibleOnly);
+    [LibraryImport(Defs.Lib)]
+    private static partial nint XPGetWidgetForLocation(nint container, int xOffset, int yOffset, int recursive, int visibleOnly);
 
-        return XPGetWidgetForLocation(_id, offset.X, offset.Y, recursive ? 1 : 0, visibleOnly ? 1 : 0) is not 0 and var p ? _widgets[p] : null;
-    }
+    public Widget? GetWidgetForLocation(Point offset, bool recursive, bool visibleOnly) =>
+        XPGetWidgetForLocation(_id, offset.X, offset.Y, recursive ? 1 : 0, visibleOnly ? 1 : 0) is not 0 and var p ? _widgets[p] : null;
+
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPGetWidgetExposedGeometry(nint widget, out int left, out int top, out int right, out int bottom);
 
     public Rectangle ExposedGeometry
     {
         get
         {
-            [DllImport(Defs.Lib)]
-            static extern void XPGetWidgetExposedGeometry(nint widget, out int left, out int top, out int right, out int bottom);
-
             XPGetWidgetExposedGeometry(_id, out var left, out var top, out var right, out var bottom);
             return new(left, top, right - left, bottom - top);
         }
     }
 
+    [LibraryImport(Defs.Lib, StringMarshalling = StringMarshalling.Utf8)]
+    private static partial void XPSetWidgetDescriptor(nint widget, string descriptor);
+
+    [LibraryImport(Defs.Lib)]
+    private static partial int XPGetWidgetDescriptor(nint widget, in byte descriptor, int maxDescLength);
+
     public string Descriptor
     {
-        set
-        {
-            [DllImport(Defs.Lib)]
-            static extern void XPSetWidgetDescriptor(nint widget, [MarshalAs(UnmanagedType.LPUTF8Str)] string descriptor);
-
-            XPSetWidgetDescriptor(_id, value);
-        }
+        set => XPSetWidgetDescriptor(_id, value);
         get
         {
-            [DllImport(Defs.Lib)]
-            static extern int XPGetWidgetDescriptor(nint widget, in byte descriptor, int maxDescLength);
-
             ReadOnlySpan<byte> d = stackalloc byte[XPGetWidgetDescriptor(_id, in Unsafe.NullRef<byte>(), 0)];
             _ = XPGetWidgetDescriptor(_id, in MemoryMarshal.GetReference(d), d.Length);
             return Encoding.UTF8.GetString(d);
@@ -345,19 +278,17 @@ public abstract class Widget : IDisposable
 
     // TODO: get underlying window
 
-    protected void SetProperty(int property, nint value)
-    {
-        [DllImport(Defs.Lib)]
-        static extern void XPSetWidgetProperty(nint widget, int property, nint value);
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPSetWidgetProperty(nint widget, int property, nint value);
 
+    protected void SetProperty(int property, nint value) =>
         XPSetWidgetProperty(_id, property, value);
-    }
+
+    [LibraryImport(Defs.Lib)]
+    private static partial nint XPGetWidgetProperty(nint widget, int property, out int exists);
 
     protected nint GetProperty(int property, out bool exists)
     {
-        [DllImport(Defs.Lib)]
-        static extern nint XPGetWidgetProperty(nint widget, int property, out int exists);
-
         var p = XPGetWidgetProperty(_id, property, out var e);
         exists = e != 0;
         return p;
@@ -381,49 +312,36 @@ public abstract class Widget : IDisposable
         set => SetProperty(7, value ? 1 : 0);
     }
 
-    public Widget? SetKeyboardFocus()
-    {
-        [DllImport(Defs.Lib)]
-        static extern nint XPSetKeyboardFocus(nint widget);
+    [LibraryImport(Defs.Lib)]
+    private static partial nint XPSetKeyboardFocus(nint widget);
 
-        return XPSetKeyboardFocus(_id) is not 0 and var p ? _widgets[p] : null;
-    }
+    public Widget? SetKeyboardFocus() =>
+        XPSetKeyboardFocus(_id) is not 0 and var p ? _widgets[p] : null;
 
-    public void LoseKeyboardFocus()
-    {
-        [DllImport(Defs.Lib)]
-        static extern void XPLoseKeyboardFocus(nint widget);
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPLoseKeyboardFocus(nint widget);
 
+    public void LoseKeyboardFocus() =>
         XPLoseKeyboardFocus(_id);
-    }
 
-    public static Widget? WithFocus
-    {
-        get
-        {
-            [DllImport(Defs.Lib)]
-            static extern nint XPGetWidgetWithFocus();
+    [LibraryImport(Defs.Lib)]
+    private static partial nint XPGetWidgetWithFocus();
 
-            return XPGetWidgetWithFocus() is not 0 and var p ? _widgets[p] : null;
-        }
-    }
+    public static Widget? WithFocus => XPGetWidgetWithFocus() is not 0 and var p ? _widgets[p] : null;
+
+    [LibraryImport(Defs.Lib)]
+    private static partial int XPUSelectIfNeeded(WidgetMessage message, nint widget, nint param1, nint param2, int eatClick);
+
+    [LibraryImport(Defs.Lib)]
+    private static partial int XPUDefocusKeyboard(WidgetMessage message, nint widget, nint param1, nint param2, int eatClick);
+
+    [LibraryImport(Defs.Lib)]
+    private static partial int XPUDragWidget(WidgetMessage message, nint widget, nint param1, nint param2, int left, int top, int right, int bottom);
 
     protected virtual bool Message(WidgetMessage message, nint param1, nint param2)
     {
-        [DllImport(Defs.Lib)]
-        static extern int XPUSelectIfNeeded(WidgetMessage message, nint widget, nint param1, nint param2, int eatClick);
-
-        [DllImport(Defs.Lib)]
-        static extern int XPUDefocusKeyboard(WidgetMessage message, nint widget, nint param1, nint param2, int eatClick);
-
-        bool Drag()
-        {
-            [DllImport(Defs.Lib)]
-            static extern int XPUDragWidget(WidgetMessage message, nint widget, nint param1, nint param2, int left, int top, int right, int bottom);
-
-            return DragRegion is { Left: var left, Top: var top, Right: var right, Bottom: var bottom } &&
-                XPUDragWidget(message, _id, param1, param2, left, top, right, bottom) != 0;
-        }
+        bool Drag() => DragRegion is { Left: var left, Top: var top, Right: var right, Bottom: var bottom } &&
+            XPUDragWidget(message, _id, param1, param2, left, top, right, bottom) != 0;
 
         return message switch
         {
@@ -459,13 +377,11 @@ public abstract class Widget : IDisposable
     static int Callback(WidgetMessage message, nint widget, nint param1, nint param2) =>
         _widgets.TryGetValue(widget, out var p) && p.Message(message, param1, param2) is true ? 1 : 0;
 
-    public void MoveBy(Point delta)
-    {
-        [DllImport(Defs.Lib)]
-        static extern void XPUMoveWidgetBy(nint widget, int deltaX, int deltaY);
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPUMoveWidgetBy(nint widget, int deltaX, int deltaY);
 
+    public void MoveBy(Point delta) =>
         XPUMoveWidgetBy(_id, delta.X, delta.Y);
-    }
 
     public bool? SelectIfNeeded { get; set; }
 

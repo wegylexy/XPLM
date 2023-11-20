@@ -8,7 +8,7 @@ public enum FlightLoopPhase
     AfterFlightModel
 }
 
-public sealed class FlightLoop : IDisposable
+public sealed partial class FlightLoop : IDisposable
 {
     [StructLayout(LayoutKind.Sequential)]
     unsafe readonly struct Create
@@ -29,11 +29,11 @@ public sealed class FlightLoop : IDisposable
 
     readonly GCHandle _handle;
 
+    [LibraryImport(Defs.Lib)]
+    private static partial nint XPLMCreateFlightLoop(in Create options);
+
     public unsafe FlightLoop(FlightLoopPhase phase, Func<float, float, int, float> callback)
     {
-        [DllImport(Defs.Lib)]
-        static extern nint XPLMCreateFlightLoop(in Create options);
-
         [UnmanagedCallersOnly]
         static float Loop(float elapsedSinceLastCall, float elapsedSinceLastFlightLoop, int counter, nint handle)
         {
@@ -55,12 +55,12 @@ public sealed class FlightLoop : IDisposable
 
     ~FlightLoop() => Dispose();
 
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPLMDestroyFlightLoop(nint flightLoopId);
+
     bool _disposed;
     public void Dispose()
     {
-        [DllImport(Defs.Lib)]
-        static extern void XPLMDestroyFlightLoop(nint flightLoopId);
-
         if (!_disposed)
         {
             XPLMDestroyFlightLoop(_id);
@@ -70,11 +70,9 @@ public sealed class FlightLoop : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    public void Schedule(float interval, bool relativeToNow)
-    {
-        [DllImport(Defs.Lib)]
-        static extern void XPLMScheduleFlightLoop(nint flightLoopId, float interval, int relativeToNow);
+    [LibraryImport(Defs.Lib)]
+    private static partial void XPLMScheduleFlightLoop(nint flightLoopId, float interval, int relativeToNow);
 
+    public void Schedule(float interval, bool relativeToNow) =>
         XPLMScheduleFlightLoop(_id, interval, relativeToNow ? 1 : 0);
-    }
 }

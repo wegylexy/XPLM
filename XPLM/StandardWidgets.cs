@@ -9,13 +9,10 @@ public enum MainWindowStyle
     Translucent
 }
 
-public sealed class MainWindow : Widget
+public sealed partial class MainWindow(Rectangle rectangle, bool visible, string descriptor) :
+    Widget(rectangle, visible, descriptor, null, WidgetClass.MainWindow)
 {
     public event Func<MainWindow, bool>? CloseButtonPushed;
-
-    public MainWindow(Rectangle rectangle, bool visible, string descriptor) :
-        base(rectangle, visible, descriptor, null, WidgetClass.MainWindow)
-    { }
 
     public MainWindowStyle Style
     {
@@ -29,18 +26,15 @@ public sealed class MainWindow : Widget
         set => SetProperty(1200, value ? 1 : 0);
     }
 
-    protected override bool Message(WidgetMessage message, nint param1, nint param2)
-    {
-        [DllImport(Defs.Lib)]
-        static extern int XPUFixedLayout(WidgetMessage message, nint widget, nint param1, nint param2);
+    [LibraryImport(Defs.Lib)]
+    private static partial int XPUFixedLayout(WidgetMessage message, nint widget, nint param1, nint param2);
 
-        return message switch
-        {
-            WidgetMessage.CloseButtonPushed => CloseButtonPushed?.Invoke(this),
-            WidgetMessage.Reshape when FixedLayout => XPUFixedLayout(message, _id, param1, param2) != 0,
-            _ => base.Message(message, param1, param2)
-        } is true;
-    }
+    protected override bool Message(WidgetMessage message, nint param1, nint param2) => message switch
+    {
+        WidgetMessage.CloseButtonPushed => CloseButtonPushed?.Invoke(this),
+        WidgetMessage.Reshape when FixedLayout => XPUFixedLayout(message, _id, param1, param2) != 0,
+        _ => base.Message(message, param1, param2)
+    } is true;
 
     public bool FixedLayout { get; set; }
 }
@@ -52,12 +46,9 @@ public enum SubWindowStyle
     ListView
 }
 
-public sealed class SubWindow : Widget
+public sealed class SubWindow(Rectangle rectangle, bool visible, string descriptor) :
+    Widget(rectangle, visible, descriptor, null, WidgetClass.SubWindow)
 {
-    public SubWindow(Rectangle rectangle, bool visible, string descriptor) :
-        base(rectangle, visible, descriptor, null, WidgetClass.SubWindow)
-    { }
-
     public SubWindowStyle Style
     {
         get => (SubWindowStyle)GetProperty(1200, out _);
@@ -81,14 +72,11 @@ public enum ButtonBehavior
     RadioButton
 }
 
-public sealed class Button : Widget
+public sealed class Button(Rectangle rectangle, bool visible, string descriptor) :
+    Widget(rectangle, visible, descriptor, null, WidgetClass.Button)
 {
     public event Func<Button, bool>? Pressed;
     public event Func<Button, bool, bool>? StateChanged;
-
-    public Button(Rectangle rectangle, bool visible, string descriptor) :
-        base(rectangle, visible, descriptor, null, WidgetClass.Button)
-    { }
 
     public ButtonStyle Style
     {
@@ -124,13 +112,10 @@ public enum TextFieldStyle
     Translucent = 4
 }
 
-public sealed class TextField : Widget
+public sealed class TextField(Rectangle rectangle, bool visible, string descriptor) :
+    Widget(rectangle, visible, descriptor, null, WidgetClass.TextField)
 {
     public event Func<TextField, bool>? Changed;
-
-    public TextField(Rectangle rectangle, bool visible, string descriptor) :
-        base(rectangle, visible, descriptor, null, WidgetClass.TextField)
-    { }
 
     public int SelectionStart
     {
@@ -192,13 +177,10 @@ public enum ScrollBarStyle
     Slider
 }
 
-public sealed class ScrollBar : Widget
+public sealed class ScrollBar(Rectangle rectangle, bool visible, string descriptor) :
+    Widget(rectangle, visible, descriptor, null, WidgetClass.ScrollBar)
 {
     public event Func<ScrollBar, bool>? Changed;
-
-    public ScrollBar(Rectangle rectangle, bool visible, string descriptor) :
-        base(rectangle, visible, descriptor, null, WidgetClass.ScrollBar)
-    { }
 
     public int SliderPosition
     {
@@ -236,12 +218,9 @@ public sealed class ScrollBar : Widget
             base.Message(message, param1, param2);
 }
 
-public sealed class Caption : Widget
+public sealed class Caption(Rectangle rectangle, bool visible, string descriptor) :
+    Widget(rectangle, visible, descriptor, null, WidgetClass.Caption)
 {
-    public Caption(Rectangle rectangle, bool visible, string descriptor) :
-        base(rectangle, visible, descriptor, null, WidgetClass.Caption)
-    { }
-
     public bool Lit
     {
         get => GetProperty(1600, out _) != 0;
@@ -272,12 +251,9 @@ public enum GeneralGraphicsStyle
     WayPoint
 }
 
-public sealed class GeneralGraphics : Widget
+public sealed class GeneralGraphics(Rectangle rectangle, bool visible, string descriptor) :
+    Widget(rectangle, visible, descriptor, null, WidgetClass.GeneralGraphics)
 {
-    public GeneralGraphics(Rectangle rectangle, bool visible, string descriptor) :
-        base(rectangle, visible, descriptor, null, WidgetClass.GeneralGraphics)
-    { }
-
     public GeneralGraphicsStyle Style
     {
         get => (GeneralGraphicsStyle)GetProperty(1700, out _);
@@ -285,12 +261,9 @@ public sealed class GeneralGraphics : Widget
     }
 }
 
-public sealed class Progress : Widget
+public sealed class Progress(Rectangle rectangle, bool visible, string descriptor) :
+    Widget(rectangle, visible, descriptor, null, WidgetClass.Progress)
 {
-    public Progress(Rectangle rectangle, bool visible, string descriptor) :
-        base(rectangle, visible, descriptor, null, WidgetClass.Progress)
-    { }
-
     public int Position
     {
         get => (int)GetProperty(1800, out _);
