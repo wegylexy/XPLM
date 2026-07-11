@@ -1,0 +1,22 @@
+[package]
+name = "xplm"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+xplm-sys = { path = "../xplm-sys", default-features = false }
+xplm-macros = { path = "../xplm-macros" }
+
+[features]
+XPLM200 = ["xplm-sys/XPLM200"]
+XPLM210 = ["XPLM200", "xplm-sys/XPLM210"]
+XPLM300 = ["XPLM210", "xplm-sys/XPLM300"]
+XPLM301 = ["XPLM300", "xplm-sys/XPLM301"]
+XPLM302 = ["XPLM301", "xplm-sys/XPLM302"]
+XPLM303 = ["XPLM302", "xplm-sys/XPLM303"]
+XPLM400 = ["XPLM303", "xplm-sys/XPLM400"]
+XPLM410 = ["XPLM400", "xplm-sys/XPLM410"]
+XPLM420 = ["XPLM410", "xplm-sys/XPLM420"]
+
+default = ["XPLM420"]

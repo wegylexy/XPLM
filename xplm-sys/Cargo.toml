@@ -1,0 +1,30 @@
+[package]
+name = "xplm-sys"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+links = "XPLM"
+build = "build.rs"
+
+[dependencies]
+
+[build-dependencies]
+bindgen = "0.69"
+cc = "1"
+
+[features]
+# Feature flags mirror the XPLM<version> macros defined in the vendored
+# CHeaders. They are cumulative in the SDK sense: the SDK does not imply
+# lower versions when a higher one is defined, so each feature here
+# depends on the one below it to pass every required -D flag together.
+XPLM200 = []
+XPLM210 = ["XPLM200"]
+XPLM300 = ["XPLM210"]
+XPLM301 = ["XPLM300"]
+XPLM302 = ["XPLM301"]
+XPLM303 = ["XPLM302"]
+XPLM400 = ["XPLM303"]
+XPLM410 = ["XPLM400"]
+XPLM420 = ["XPLM410"]
+
+default = ["XPLM420"]

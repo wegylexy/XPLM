@@ -1,0 +1,8 @@
+[workspace]
+resolver = "2"
+members = ["xplm-sys", "xplm", "xplm-macros"]
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/FlyByWireless/XPLM"
