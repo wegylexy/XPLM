@@ -186,6 +186,30 @@ let lat = telemetry.latitude.get();
 telemetry.throttle.set(0.75); // only compiles because it's ReadWrite<f32>
 ```
 
+### Commands
+
+`Command`s aren't owned by any one plugin — `find`/`create` return a handle
+that stays valid even after your plugin unloads. `register_handler` returns a
+`CommandHandler`; dropping *that* unregisters your callback (the command
+itself is unaffected):
+
+```rust
+use xplm::command::{Command, CommandPhase};
+
+let cmd = Command::find("sim/autopilot/hold_altitude")
+    .or_else(|| Command::create("my_plugin/do_the_thing", "Does the thing"))
+    .expect("failed to find/create command");
+
+let handler = cmd.register_handler(true, |phase| {
+    if phase == CommandPhase::Begin {
+        xplm::log("do_the_thing: pressed\n");
+    }
+    true // let processing continue (to X-Plane and other plugins)
+});
+
+cmd.once(); // or begin()/end() for a held-down command
+```
+
 ## Running tests (Windows)
 
 `xplm-sys` delay-loads `XPLM_64.dll` (it only exists inside a running X-Plane

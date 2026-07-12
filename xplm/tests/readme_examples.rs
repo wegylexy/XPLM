@@ -7,6 +7,7 @@
 
 #![allow(dead_code)]
 
+use xplm::command::{Command, CommandHandler, CommandPhase};
 use xplm::dataref::{ReadOnly, ReadWrite};
 use xplm::menu::Menu;
 use xplm::processing::{FlightLoop, FlightLoopPhase};
@@ -49,4 +50,22 @@ fn _readme_plugin_start() -> (Menu, FlightLoop) {
     flight_loop.schedule(-1.0, true);
 
     (menu, flight_loop)
+}
+
+// README "Commands" snippet.
+fn _readme_command() -> (Command, CommandHandler) {
+    let cmd = Command::find("sim/autopilot/hold_altitude")
+        .or_else(|| Command::create("my_plugin/do_the_thing", "Does the thing"))
+        .expect("failed to find/create command");
+
+    let handler = cmd.register_handler(true, |phase| {
+        if phase == CommandPhase::Begin {
+            xplm::log("do_the_thing: pressed\n");
+        }
+        true
+    });
+
+    cmd.once();
+
+    (cmd, handler)
 }

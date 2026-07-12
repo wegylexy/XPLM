@@ -58,21 +58,30 @@ next.
   `examples/hello-plugin` converted to the attribute-macro flow; `trybuild`
   `.pass(...)` tests confirm both macros expand to code that compiles.
 
-## Phase 7 — Remaining surfaces
+## Phase 7 — Commands + core Utilities (done); rest split into 7b
 
-- Planes, Scenery, Utilities (`Planes.cs`, `Scenery.cs`, `Utilities.cs`), plus
-  Instance (`Instance.cs`/`XPLMInstance.h`), moved here from Phase 5 since it
-  depends on `XPLMDrawInfo_t`/`XPLMObjectRef` from Scenery.
-- Widgets, off `SDK/CHeaders/Widgets` (`XPWidgets.h`, `XPStandardWidgets.h`,
-  `XPUIGraphics.h`) — same RAII + trampoline treatment as everything else,
-  and the same no-stale-index/no-raw-pointer invariant from `CLAUDE.md`
-  applies to any item-tree-style API in here.
-  `SDK/CHeaders/Wrappers` (the C++ convenience wrappers) is reference-only and
-  is *not* ported — Rust's RAII already supersedes what those exist for in
-  C++.
-- XPMP2 multiplayer/legacy aircraft (`LegacyAircraft.cs`, `Multiplayer.cs`).
-- Lower priority than Phases 2-6: additive rather than core-architecture-
-  defining.
+- `xplm::command::Command`/`CommandHandler` (`XPLMUtilities.h`'s command
+  subsystem): `Command` is a thin, `Copy` handle — unlike everything else in
+  this crate it isn't `Drop`-owned, since a command isn't owned by any one
+  plugin and outlives whichever one created it. `CommandHandler` (from
+  `Command::register_handler`) is the RAII + trampoline half — dropping it
+  unregisters just that callback, via the exact `(command, fn ptr, before,
+  refcon)` tuple `XPLMUnregisterCommandHandler` requires to match.
+- `xplm::utilities`: a handful of stateless free functions —
+  `system_path`/`prefs_path` (reads the SDK's documented 512-byte buffer
+  convention into a `String`), `versions`, `speak_string`, `reload_scenery`.
+- **Split out as Phase 7b**: Planes, Scenery, Instance (`Planes.cs`,
+  `Scenery.cs`, `Instance.cs`/`XPLMInstance.h` — Instance depends on
+  `XPLMDrawInfo_t`/`XPLMObjectRef` from Scenery, so they land together), the
+  rest of `XPLMUtilities.h` (directory listing, data files, key sniffers,
+  hotkeys), Widgets (`SDK/CHeaders/Widgets` — `XPWidgets.h`,
+  `XPStandardWidgets.h`, `XPUIGraphics.h`; same RAII + trampoline treatment,
+  and the no-stale-index/no-raw-pointer invariant from `CLAUDE.md` applies to
+  any item-tree API in there), and XPMP2 multiplayer/legacy aircraft
+  (`LegacyAircraft.cs`, `Multiplayer.cs`). `SDK/CHeaders/Wrappers` (C++
+  convenience wrappers) remains reference-only, not ported.
+- README updated with a "Commands" usage section; `xplm/tests/readme_examples.rs`
+  extended to type-check it alongside the existing snippets.
 
 ## Phase 8 — Parity example
 
