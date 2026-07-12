@@ -1,0 +1,3 @@
+[submodule "external/XPMP2"]
+	path = external/XPMP2
+	url = https://github.com/TwinFan/XPMP2.git

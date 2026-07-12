@@ -13,6 +13,15 @@ checks.
   backed by a closure registry.
 - `xplm-macros` — `#[plugin(...)]` attribute macro and `#[derive(DataRefContainer)]`,
   re-exported through `xplm`.
+- `external/XPMP2` — git submodule of https://github.com/TwinFan/XPMP2.git
+  (pinned to `master`/`v3.6.1`, currently the same commit). Its public
+  plane-creation API is a C++ class (`XPMP2::Aircraft`, subclass + override
+  virtuals), not flat C, despite the SDK's own naming suggesting otherwise
+  (`XPCAircraft.h` is itself a deprecated *C++* wrapper class, not a C API).
+  No `xpmp2-sys`/`xpmp2` crates exist yet — see [PHASES.md](PHASES.md) for
+  the design (a hand-written C++ shim exposing the `Aircraft` subclass's
+  virtuals as `extern "C"` functions, since `bindgen` can't synthesize a
+  vtable or let Rust override a C++ virtual method on its own).
 
 ## SDK headers
 
