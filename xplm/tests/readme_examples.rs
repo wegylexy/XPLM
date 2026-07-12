@@ -9,8 +9,10 @@
 
 use xplm::command::{Command, CommandHandler, CommandPhase};
 use xplm::dataref::{ReadOnly, ReadWrite};
+use xplm::instance::Instance;
 use xplm::menu::Menu;
 use xplm::processing::{FlightLoop, FlightLoopPhase};
+use xplm::scenery::{DrawInfo, Object, ProbeOutcome, TerrainProbe};
 
 // README "Menus, including nested submenus" snippet.
 fn _readme_nested_menu(menu: &Menu) {
@@ -68,4 +70,83 @@ fn _readme_command() -> (Command, CommandHandler) {
     cmd.once();
 
     (cmd, handler)
+}
+
+// README "Terrain probing and instanced object drawing" snippet.
+fn _readme_scenery_instance(x: f32, y: f32, z: f32) -> Instance {
+    let probe = TerrainProbe::new();
+    if let ProbeOutcome::Hit(hit) = probe.probe_terrain(x, y, z) {
+        let _ = hit.location;
+    }
+
+    let object =
+        Object::load("Resources/plugins/MyPlugin/my_object.obj").expect("failed to load object");
+    let instance = object
+        .new_instance(&["sim/graphics/animation/sin_wave_2"])
+        .expect("failed to create instance");
+
+    instance.set_position(
+        DrawInfo {
+            x,
+            y,
+            z,
+            pitch: 0.0,
+            heading: 0.0,
+            roll: 0.0,
+        },
+        &[0.5],
+    );
+
+    instance
+}
+
+// README "Loading objects asynchronously" snippet.
+mod readme_async_bridge {
+    use std::cell::RefCell;
+    use std::future::Future;
+    use std::pin::Pin;
+    use std::rc::Rc;
+    use std::task::{Context, Poll, Waker};
+
+    use xplm::scenery::Object;
+
+    #[derive(Default)]
+    struct LoadState {
+        result: Option<Option<Object>>,
+        waker: Option<Waker>,
+    }
+
+    struct LoadObject(Rc<RefCell<LoadState>>);
+
+    impl Future for LoadObject {
+        type Output = Option<Object>;
+        fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+            let mut state = self.0.borrow_mut();
+            match state.result.take() {
+                Some(object) => Poll::Ready(object),
+                None => {
+                    state.waker = Some(cx.waker().clone());
+                    Poll::Pending
+                }
+            }
+        }
+    }
+
+    fn load_object(path: &str) -> LoadObject {
+        let state = Rc::new(RefCell::new(LoadState::default()));
+        let state_for_callback = state.clone();
+        Object::load_async(path, move |object| {
+            let mut state = state_for_callback.borrow_mut();
+            state.result = Some(object);
+            if let Some(waker) = state.waker.take() {
+                waker.wake();
+            }
+        });
+        LoadObject(state)
+    }
+
+    #[allow(dead_code)]
+    fn _typecheck() -> LoadObject {
+        load_object("Resources/plugins/MyPlugin/my_object.obj")
+    }
 }

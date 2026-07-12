@@ -58,7 +58,7 @@ next.
   `examples/hello-plugin` converted to the attribute-macro flow; `trybuild`
   `.pass(...)` tests confirm both macros expand to code that compiles.
 
-## Phase 7 — Commands + core Utilities (done); rest split into 7b
+## Phase 7 — Commands, Utilities, Scenery, Instance (done); rest split into 7b
 
 - `xplm::command::Command`/`CommandHandler` (`XPLMUtilities.h`'s command
   subsystem): `Command` is a thin, `Copy` handle — unlike everything else in
@@ -70,9 +70,32 @@ next.
 - `xplm::utilities`: a handful of stateless free functions —
   `system_path`/`prefs_path` (reads the SDK's documented 512-byte buffer
   convention into a `String`), `versions`, `speak_string`, `reload_scenery`.
-- **Split out as Phase 7b**: Planes, Scenery, Instance (`Planes.cs`,
-  `Scenery.cs`, `Instance.cs`/`XPLMInstance.h` — Instance depends on
-  `XPLMDrawInfo_t`/`XPLMObjectRef` from Scenery, so they land together), the
+- `xplm::scenery`: `TerrainProbe` (`XPLMProbeRef`, RAII — the SDK recommends
+  reusing one probe for nearby points rather than allocating per-query),
+  `Object` (a loaded `.obj`, X-Plane-refcounted, `Drop` calls
+  `XPLMUnloadObject`; `load`/`load_async`, the latter a single-shot
+  `FnOnce` trampoline since there's no way to cancel an in-flight load),
+  `DrawInfo`, and magnetic-variation free functions (`XPLM300`+).
+- `xplm::instance::Instance` (`XPLMInstance.h`) builds on `Object`/`DrawInfo`
+  — this is why Instance was moved out of Phase 5 to land here instead of
+  being split from Scenery artificially. `set_position` takes a `&[f32]`
+  matching the dataref list `Instance::new` was given, one value per entry
+  in the same order. `Object::new_instance(&self, datarefs)` is sugar for
+  `Instance::new(&object, datarefs)` — `Instance::from(Object)` doesn't fit
+  since `new` genuinely needs the dataref list too, not just one value to
+  convert from.
+- Decided (asked, not assumed): `Object::load_async` stays callback-based,
+  not `async fn` — X-Plane's plugin runtime has no ambient executor to poll
+  a `Future`, so making it `async` in `xplm` itself wouldn't solve the
+  "who drives this?" problem, just move it onto every caller. README
+  documents the plain oneshot-channel bridge a caller with their own async
+  runtime could use instead, type-checked in `readme_examples.rs`.
+- README gained "Commands" and "Terrain probing and instanced object
+  drawing" sections; `xplm/tests/readme_examples.rs` type-checks both
+  (alongside the existing snippets) without executing them — actually
+  calling these functions needs a hosted X-Plane process, the same
+  limitation as everywhere else real `XPLM*` calls show up in this crate.
+- **Still split out as Phase 7b**: Planes (`Planes.cs`/`XPLMPlanes.h`), the
   rest of `XPLMUtilities.h` (directory listing, data files, key sniffers,
   hotkeys), Widgets (`SDK/CHeaders/Widgets` — `XPWidgets.h`,
   `XPStandardWidgets.h`, `XPUIGraphics.h`; same RAII + trampoline treatment,
@@ -80,8 +103,6 @@ next.
   any item-tree API in there), and XPMP2 multiplayer/legacy aircraft
   (`LegacyAircraft.cs`, `Multiplayer.cs`). `SDK/CHeaders/Wrappers` (C++
   convenience wrappers) remains reference-only, not ported.
-- README updated with a "Commands" usage section; `xplm/tests/readme_examples.rs`
-  extended to type-check it alongside the existing snippets.
 
 ## Phase 8 — Parity example
 

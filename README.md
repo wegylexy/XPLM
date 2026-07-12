@@ -210,6 +210,95 @@ let handler = cmd.register_handler(true, |phase| {
 cmd.once(); // or begin()/end() for a held-down command
 ```
 
+### Terrain probing and instanced object drawing
+
+`TerrainProbe` finds the physical scenery mesh under a point; `Object`/`Instance`
+load a `.obj` and draw it, moving it (and the datarefs it animates with) from a
+flight loop rather than a drawing callback:
+
+```rust
+use xplm::scenery::{DrawInfo, Object, ProbeOutcome, TerrainProbe};
+
+let probe = TerrainProbe::new();
+if let ProbeOutcome::Hit(hit) = probe.probe_terrain(x, y, z) {
+    // hit.location is the terrain point directly below (x, y, z).
+}
+
+let object = Object::load("Resources/plugins/MyPlugin/my_object.obj")
+    .expect("failed to load object");
+// Object::new_instance(...) is shorthand for Instance::new(&object, ...).
+let instance = object
+    .new_instance(&["sim/graphics/animation/sin_wave_2"])
+    .expect("failed to create instance");
+
+// From a flight loop or UI callback (never a drawing callback):
+instance.set_position(
+    DrawInfo { x, y, z, pitch: 0.0, heading: 0.0, roll: 0.0 },
+    &[0.5], // one value per dataref passed to Instance::new, same order
+);
+```
+
+#### Loading objects asynchronously
+
+`Object::load_async` is callback-based, not `async fn` — X-Plane's plugin
+runtime has no ambient executor to poll a `Future` for you, so making this
+`async` in `xplm` itself would just move the "who drives this?" problem onto
+every caller without actually solving it. If you already have your own
+async runtime driving other work in your plugin (uncommon, but not unheard
+of), bridging the callback into a real `Future` is a plain oneshot-channel
+pattern — nothing `xplm`-specific:
+
+```rust
+use std::cell::RefCell;
+use std::future::Future;
+use std::pin::Pin;
+use std::rc::Rc;
+use std::task::{Context, Poll, Waker};
+
+use xplm::scenery::Object;
+
+#[derive(Default)]
+struct LoadState {
+    result: Option<Option<Object>>,
+    waker: Option<Waker>,
+}
+
+struct LoadObject(Rc<RefCell<LoadState>>);
+
+impl Future for LoadObject {
+    type Output = Option<Object>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut state = self.0.borrow_mut();
+        match state.result.take() {
+            Some(object) => Poll::Ready(object),
+            None => {
+                state.waker = Some(cx.waker().clone());
+                Poll::Pending
+            }
+        }
+    }
+}
+
+fn load_object(path: &str) -> LoadObject {
+    let state = Rc::new(RefCell::new(LoadState::default()));
+    let state_for_callback = state.clone();
+    Object::load_async(path, move |object| {
+        let mut state = state_for_callback.borrow_mut();
+        state.result = Some(object);
+        if let Some(waker) = state.waker.take() {
+            waker.wake();
+        }
+    });
+    LoadObject(state)
+}
+```
+
+You'd still need something to actually poll this `Future` to completion —
+e.g. a small executor stepped once per `FlightLoop` tick — which is a bigger
+piece of infrastructure than `xplm` provides today (see `PHASES.md` if you're
+considering building one; it'd need to be a crate-level addition, not a
+per-caller pattern, to be worth shipping).
+
 ## Running tests (Windows)
 
 `xplm-sys` delay-loads `XPLM_64.dll` (it only exists inside a running X-Plane

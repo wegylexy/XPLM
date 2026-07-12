@@ -14,8 +14,10 @@ pub mod camera;
 pub mod command;
 pub mod dataref;
 pub mod graphics;
+pub mod instance;
 pub mod menu;
 pub mod plugin;
+pub mod scenery;
 pub mod utilities;
 // FlightLoop's underlying XPLMCreateFlightLoop/XPLMDestroyFlightLoop/
 // XPLMScheduleFlightLoop are all `#if defined(XPLM210)` in XPLMProcessing.h
