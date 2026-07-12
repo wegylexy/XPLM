@@ -98,6 +98,10 @@ fn main() {
         println!("cargo:rustc-cfg=feature=\"{define}\"");
     }
 
+    if env::var("CARGO_FEATURE_DEPRECATED").is_ok() {
+        builder = builder.clang_arg("-DXPLM_DEPRECATED");
+    }
+
     let bindings = builder
         .generate()
         .expect("unable to generate xplm-sys bindings");

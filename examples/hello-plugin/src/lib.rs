@@ -1,10 +1,12 @@
 //! Minimal example plugin proving Phases 2-5b end to end: plugin lifecycle
 //! (this crate's `XPlanePlugin` impl + `register_plugin!`), the panic-guarded
-//! trampoline pattern, a `FlightLoop` RAII wrapper, a `Menu`, and a `Window`.
+//! trampoline pattern, a `FlightLoop` RAII wrapper, a `Menu`, a `Window`, and
+//! `xplm::graphics` drawing.
 //!
 //! Build with `cargo build -p hello-plugin`, then load the resulting DLL as
 //! an `.xpl` in a running X-Plane to verify manually (see PHASES.md Phase 4).
 
+use xplm::graphics::{self, Font};
 use xplm::menu::{Menu, MenuCheckState};
 use xplm::plugin::XPlanePlugin;
 use xplm::processing::{FlightLoop, FlightLoopPhase};
@@ -34,10 +36,10 @@ impl XPlanePlugin for HelloPlugin {
         heartbeat.schedule(-1.0, true);
 
         let window = Window::builder(50, 250, 300, 50)
-            .on_draw(|_window| {
-                // Real drawing would use xplm::graphics (Phase 5b's other
-                // half, still to come) or raw OpenGL calls; left as a no-op
-                // here since this example only proves the callback wiring.
+            .on_draw(|window| {
+                let (left, top, right, bottom) = window.geometry();
+                graphics::draw_translucent_dark_box(left, top, right, bottom);
+                graphics::draw_string([1.0, 1.0, 1.0], left + 5, top - 15, "Hello from Rust!", None, Font::Basic);
             })
             .build()
             .expect("failed to create hello-plugin window");

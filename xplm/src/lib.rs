@@ -4,6 +4,7 @@
 
 pub mod camera;
 pub mod dataref;
+pub mod graphics;
 pub mod menu;
 pub mod plugin;
 // FlightLoop's underlying XPLMCreateFlightLoop/XPLMDestroyFlightLoop/

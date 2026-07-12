@@ -22,4 +22,8 @@ XPLM400 = ["XPLM303", "xplm-sys/XPLM400"]
 XPLM410 = ["XPLM400", "xplm-sys/XPLM410"]
 XPLM420 = ["XPLM410", "xplm-sys/XPLM420"]
 
+# See xplm-sys/Cargo.toml: opt-in, off by default, and anything gated behind
+# it in this crate is marked #[deprecated] rather than hidden outright.
+deprecated = ["xplm-sys/deprecated"]
+
 default = ["XPLM420"]

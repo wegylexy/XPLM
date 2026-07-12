@@ -27,4 +27,12 @@ XPLM400 = ["XPLM303"]
 XPLM410 = ["XPLM400"]
 XPLM420 = ["XPLM410"]
 
+# Opt-in: exposes symbols gated behind `#if defined(XPLM_DEPRECATED)` in the
+# headers (old texture/font enum members, mostly). Off by default, matching
+# the header's own "don't use these" guidance — the safe wrappers in `xplm`
+# mark anything gated behind this `#[deprecated]` rather than hiding it
+# outright, so turning this on gets you a compiler warning per use, not a
+# silent trap.
+deprecated = []
+
 default = ["XPLM420"]
