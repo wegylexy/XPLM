@@ -1,170 +1,97 @@
 # Remaining phases
 
-Phases 0 through 6 are done — see git log for full rationale (each commit
-message carries the detail that used to live here). Summary below; only
-Phases 7-8 are described in full, since those are what's actually left. Each
+The pure-XPLM SDK surface — `xplm-sys`/`xplm`/`xplm-macros`, covering every
+`SDK/CHeaders/XPLM/*.h` header plus Widgets — is fully ported and has two
+acceptance-test example plugins (`examples/hello-plugin`,
+`examples/xpl-template`). See git log for how that was built; it isn't
+repeated here.
+
+What's left is XPMP2 multiplayer support, numbered fresh from here. Each
 phase should land as its own commit(s) and be testable before moving to the
 next.
 
-## Done (0-6)
+## What XPMP2 actually exposes (checked against current upstream headers)
 
-- **0/1** — Orphan tree with only the SDK moved over (later made gitignored,
-  downloaded per README instead). Versioned `xplm-sys` FFI: Cargo features
-  `XPLM200`-`XPLM420`, cascading low-to-high, matching exactly what's in the
-  vendored headers (no `XPLM430`). Fixed real MSVC/bindgen build issues along
-  the way (libclang needing MSVC's `INCLUDE` paths, `APL`/`IBM`/`LIN` all
-  needing explicit values, `XPLM_64.dll` needing delay-load so `cargo test`
-  can start without a hosted X-Plane process).
-- **2** — `xplm::guard()` (panic boundary, `catch_unwind` + `XPLMDebugString`
-  logging). `FlightLoop` proves the RAII + trampoline pattern every later
-  module reuses: boxed closure behind a thin refcon pointer, one
-  panic-guarded `extern "C"` trampoline, `Drop` unregisters natively.
-- **3** — `xplm::dataref::DataRef<T, Access>` / `ArrayDataRef<T, Access>`
-  (`T` sealed to `i32`/`f32`/`f64`/array variants). `ReadOnly<T>`/
-  `ReadWrite<T>` aliases; `set()` only exists under a `Writable` bound —
-  compile-time access gating, not a runtime check.
-- **4** — `xplm::plugin::XPlanePlugin` trait + `register_plugin!($t)` macro,
-  generating the five required `extern "C"` exports. `examples/hello-plugin`
-  created (a real `cdylib`, confirmed exports present in the built DLL).
-- **5** — `xplm::menu::Menu`/`MenuItem` (identity-lookup via `Rc<ItemToken>`,
-  never a cached index or raw pointer — see the standing invariant in
-  `CLAUDE.md`, raised as a real bug once already) and
-  `xplm::camera::CameraControl` (documented the SDK's single-global-slot
-  caveat on `Drop`). Instance and Display/Graphics were rescoped out (see 5b).
-- **5b** — `xplm::window::Window`/`WindowBuilder` (`XPLMCreateWindowEx`, all
-  five core callbacks default to no-ops so callers only set what they need)
-  and `xplm::graphics` (stateless wrappers: `GraphicsState`, texture/coordinate
-  helpers, text drawing). Added an opt-in `deprecated` Cargo feature
-  (`xplm-sys` → `xplm`, off by default) exposing the SDK's
-  `#if defined(XPLM_DEPRECATED)` symbols (old texture/font constants) —
-  previously invisible entirely since `build.rs` never defined that macro;
-  now reachable but each variant marked `#[deprecated]` so using one is a
-  compiler warning, not a silent trap. Caught and fixed two version-gating
-  bugs by testing `--features XPLM200` explicitly, not just the default set
-  — now a standing check for every future module.
-- **6** — `#[xplm::plugin(name = ..., signature = ..., description = ...)]`
-  attribute macro: expands to the annotated struct unchanged plus
-  `register_plugin!($t, name = ..., signature = ..., description = ...)`.
-  Required loosening Phase 4's `XPlanePlugin::NAME`/`SIGNATURE`/`DESCRIPTION`
-  to defaulted (`= ""`) associated consts and adding a second
-  `register_plugin!` macro arm taking metadata as explicit arguments —
-  otherwise the attribute (which only sees the struct item, not a later
-  separate `impl XPlanePlugin for MyPlugin` block) would have no way to
-  supply the trait's required consts without the user redundantly
-  re-declaring them. `#[derive(xplm::DataRefContainer)]` generates
-  `find() -> Option<Self>` from `#[dataref = "sim/..."]`-tagged fields,
-  calling each field type's own `find` (works unchanged for both
-  `ReadOnly<T>`/`ReadWrite<T>`, since the derive doesn't need to know which).
-  `examples/hello-plugin` converted to the attribute-macro flow; `trybuild`
-  `.pass(...)` tests confirm both macros expand to code that compiles.
+The original C# project's `XPMP2/LegacyAircraft.cs` (recovered from git
+history, same source as `examples/xpl-template`'s port) called
+`XPMPCreatePlaneWithModelName`/`XPMPDestroyPlane` — plain `extern "C"`
+functions in `inc/XPMPMultiplayer.h`. But checking upstream
+(https://github.com/TwinFan/XPMP2) directly rather than trusting that old
+usage as current guidance: those specific functions are now marked
+`[[deprecated]]`, with a doc comment pointing at subclassing
+`XPMP2::Aircraft` instead. (`inc/XPCAircraft.h`, despite its name suggesting
+a flat-C legacy API, is actually itself a deprecated *C++* class —
+`class XPCAircraft : public XPMP2::Aircraft` — not flat C at all.)
 
-## Phase 7 — Commands, Utilities, Scenery, Instance, Planes (done)
+So the plane-creation path this crate should target is the modern C++
+`XPMP2::Aircraft` class from the start, not the deprecated C callback
+function. Everything else in `inc/XPMPMultiplayer.h` — init/cleanup
+(`XPMPMultiplayerInit`/`XPMPMultiplayerCleanup`), CSL package loading,
+preference callbacks, sound (`XPMPSoundEnable`/`XPMPSoundAdd`/...), contrail
+queries — remains plain, non-deprecated `extern "C"`, and `bindgen` handles
+it exactly like every `XPLM*.h` header already ported.
 
-- `xplm::command::Command`/`CommandHandler` (`XPLMUtilities.h`'s command
-  subsystem): `Command` is a thin, `Copy` handle — unlike everything else in
-  this crate it isn't `Drop`-owned, since a command isn't owned by any one
-  plugin and outlives whichever one created it. `CommandHandler` (from
-  `Command::register_handler`) is the RAII + trampoline half — dropping it
-  unregisters just that callback, via the exact `(command, fn ptr, before,
-  refcon)` tuple `XPLMUnregisterCommandHandler` requires to match.
-- `xplm::utilities`: a handful of stateless free functions —
-  `system_path`/`prefs_path` (reads the SDK's documented 512-byte buffer
-  convention into a `String`), `versions`, `speak_string`, `reload_scenery`.
-- `xplm::scenery`: `TerrainProbe` (`XPLMProbeRef`, RAII — the SDK recommends
-  reusing one probe for nearby points rather than allocating per-query),
-  `Object` (a loaded `.obj`, X-Plane-refcounted, `Drop` calls
-  `XPLMUnloadObject`; `load`/`load_async`, the latter a single-shot
-  `FnOnce` trampoline since there's no way to cancel an in-flight load),
-  `DrawInfo`, and magnetic-variation free functions (`XPLM300`+).
-- `xplm::instance::Instance` (`XPLMInstance.h`) builds on `Object`/`DrawInfo`
-  — this is why Instance was moved out of Phase 5 to land here instead of
-  being split from Scenery artificially. `set_position` takes a `&[f32]`
-  matching the dataref list `Instance::new` was given, one value per entry
-  in the same order. `Object::new_instance(&self, datarefs)` is sugar for
-  `Instance::new(&object, datarefs)` — `Instance::from(Object)` doesn't fit
-  since `new` genuinely needs the dataref list too, not just one value to
-  convert from.
-- Decided (asked, not assumed): `Object::load_async` stays callback-based,
-  not `async fn` — X-Plane's plugin runtime has no ambient executor to poll
-  a `Future`, so making it `async` in `xplm` itself wouldn't solve the
-  "who drives this?" problem, just move it onto every caller. README
-  documents the plain oneshot-channel bridge a caller with their own async
-  runtime could use instead, type-checked in `readme_examples.rs`.
-- README gained "Commands" and "Terrain probing and instanced object
-  drawing" sections; `xplm/tests/readme_examples.rs` type-checks both
-  (alongside the existing snippets) without executing them — actually
-  calling these functions needs a hosted X-Plane process, the same
-  limitation as everywhere else real `XPLM*` calls show up in this crate.
-- `xplm::aircraft` (`XPLMPlanes.h`, done): free functions for the user's own
-  aircraft (`set_users_aircraft`, `place_user_at_airport`/`_location`,
-  `aircraft_count`, `nth_aircraft_model`) plus `AircraftAccess`, the RAII
-  wrapper for exclusive AI/multiplayer aircraft control — same
-  single-global-slot shape as `CameraControl`, but `acquire` at least tells
-  you whether you got it, and takes an optional one-shot "available now"
-  callback (same `FnOnce`-trampoline shape as `Object::load_async`) for when
-  you don't. `XPLMInitFlight`/`XPLMUpdateFlight` (`XPLM430`-gated) are
-  intentionally *not* wrapped — this crate caps version support at
-  `XPLM420` — rather than merely deferred.
+## Phase 1 — XPMP2 sys crate: flat-C lifecycle/sound/CSL + the C++ shim
 
-## Phase 7b — remaining Utilities, Widgets (done); XPMP2 still open
+- **Vendoring/build**: the original C# project vendored *prebuilt* XPMP2
+  static/import libraries directly (`XPMP2-lib/lib/win/XPMP2.lib`,
+  `lib/lin/libXPMP2.a`, `lib/XPMP2.framework.zip` for mac) rather than
+  compiling XPMP2's C++ sources itself. Do the same here where possible:
+  `xpmp2-sys` links a prebuilt library per platform (vendored the same way
+  `SDK/` is — gitignored, downloaded per a new README section, not
+  committed). A small hand-written C++ shim (see below) still needs
+  compiling locally via the `cc` crate, but that's a few shim functions, not
+  the whole library.
+- `bindgen` over `inc/XPMPMultiplayer.h` (init/cleanup/sound/CSL/contrail —
+  all plain `extern "C"`, no shim needed) exactly like the XPLM headers.
+- **The C++ shim**, for actually creating/updating a plane: a hand-written
+  `extern "C"` C++ file (compiled by `cc::Build` alongside the vendored
+  prebuilt lib) that defines one concrete subclass of `XPMP2::Aircraft`
+  whose virtual overrides (`UpdatePosition` is pure virtual; others like
+  `GetFlightId`/`GetAoA`/`SoundGetName` are overridable with defaults)
+  forward into plain C function pointers plus a `void *refcon` —
+  `bindgen` cannot let Rust override a C++ virtual method or synthesize a
+  vtable on its own, so this shim is unavoidable. Exposed to `xpmp2-sys` as
+  `extern "C"` create/destroy/update functions operating on an opaque
+  handle, matching the shape of every other SDK surface in this workspace
+  (a thin handle + functions, not a C++ type Rust ever names directly).
+  Considered and rejected for now: the `cxx` crate's bridge macros — a
+  heavier build-time dependency and a different FFI idiom than every other
+  crate here uses; the hand-shim stays consistent with how `xplm-sys` itself
+  is built (a C compiler via `cc`, nothing more) unless a concrete reason to
+  prefer `cxx` shows up.
+- New crate `xpmp2-sys` (raw FFI, mirrors `xplm-sys`'s shape: `build.rs`
+  locates the vendored library + headers, compiles the shim, `bindgen`
+  generates bindings, no safety/ergonomics of its own) as a new workspace
+  member, independent of `xplm-sys`/`xplm` (XPMP2 isn't a subsystem of the
+  XPLM SDK proper) but depending on `xplm-sys` where its headers reference
+  XPLM types directly.
+- Not started: no `xpmp2-sys` crate yet, no vendored library, no shim code,
+  no README download section.
 
-- `xplm::utilities::directory_entries` (`XPLMGetDirectoryContents`) returns
-  `DirectoryEntries`, a genuinely lazy, pull-based iterator — the `Iterator`
-  analogue of C#'s `IEnumerable<string>` — rather than eagerly filling (or
-  growing) one big buffer. It uses the SDK's own `inFirstReturn` paging
-  support internally: each `Iterator::next()` call only reaches into native
-  code once its current small page (1 KiB) of names is exhausted, so memory
-  use stays bounded by the page size no matter how large the directory is,
-  and nothing is fetched until the caller actually asks for the next name.
-  `load_data_file`/`save_data_file` + `DataFileType` (`XPLM200`+).
-- `xplm::window` gained key sniffers and hot keys — both declared in
-  `XPLMDisplay.h`, not `XPLMUtilities.h`, hence living here rather than in
-  `xplm::utilities`. `register_key_sniffer`/`KeySniffer` (RAII + trampoline,
-  unregister keyed on the same `(fn ptr, before_windows, refcon)` triple the
-  SDK requires to match). `register_hot_key`/`HotKey` (RAII, one boxed
-  `FnMut` per hot key, own-hot-keys-only unregister on `Drop`).
-  `HotKeyId`/`hot_key_count`/`nth_hot_key` expose the SDK's index-addressed
-  enumeration of *every* plugin's hot keys — the no-stale-index invariant
-  from `CLAUDE.md` applies to the enumeration position (never cached), but
-  not to `XPLMHotKeyID` itself (a genuine stable opaque handle, unlike a menu
-  item's index).
-- README gained "Directory listing and data files" and "Key sniffers and hot
-  keys" sections; both type-checked in `xplm/tests/readme_examples.rs`.
-- `xplm::widget` (`SDK/CHeaders/Widgets` — `XPWidgets.h`/`XPWidgetDefs.h`):
-  `Widget` (RAII, `Drop` calls `XPDestroyWidget`), `WidgetRef` (`Copy`
-  handle, the `Window`/`WindowRef` split repeated), `create_widget` for the
-  SDK's built-in classes (`WidgetClass`) and `create_custom_widget` for a
-  `FnMut(WidgetMessage, WidgetRef, isize, isize) -> bool` closure driving
-  everything, panic-guarded through one shared trampoline. Unlike
-  `xplm::menu::MenuItem`, every widget call (`XPDestroyWidget`,
-  `XPSetWidgetProperty`, `XPPlaceWidgetWithin`, ...) addresses a widget by
-  its raw `XPWidgetID` pointer directly, which stays valid for its whole
-  lifetime — index-addressing only shows up in enumeration
-  (`XPGetNthChildWidget`/`XPCountChildWidgets`), which `WidgetRef::children`
-  re-derives on every call rather than caching, so the no-stale-index
-  invariant from `CLAUDE.md` is satisfied without needing menu's
-  `Rc<Token>` bookkeeping — the SDK-level hazard that pattern guards against
-  doesn't actually arise here. Standard widget classes' own per-class
-  property/message IDs (`XPStandardWidgets.h`) and `XPUIGraphics.h`'s
-  native-look-and-feel drawing helpers aren't wrapped yet;
-  `WidgetPropertyId::new`/`WidgetMessage::Other` reach them by raw ID in the
-  meantime. Gated behind a new opt-in `widgets` Cargo feature (`xplm-sys` →
-  `xplm`, off by default, mirroring `deprecated`) — it's still a flat C API
-  `bindgen` handles the same way as everything else, but links a second
-  native library (`XPWidgets_64`/delay-loaded the same as `XPLM_64`), so a
-  plugin that never touches it shouldn't have to link it. README gained a
-  "Widgets" section, type-checked (behind the feature) in
-  `xplm/tests/readme_examples.rs`.
-- **Still split out**: XPMP2 multiplayer/legacy aircraft
-  (`LegacyAircraft.cs`, `Multiplayer.cs`) — deferred until the pure-XPLM
-  surface (this crate's actual scope) is fully ported; XPMP2 is a separate
-  C++ library with its own build (not just headers) and a virtual-dispatch
-  class API rather than a flat C one, so it'll need materially different
-  tooling than a bindgen wrapper when it's picked up. `SDK/CHeaders/Wrappers`
-  (C++ convenience wrappers) remains reference-only, not ported.
+## Phase 2 — XPMP2 safe wrapper
 
-## Phase 8 — Parity example
-
-- Port `XPL/Program.cs` (the original C# sample plugin) to Rust using the
-  Phase 6 macros, as the acceptance test that the abstraction is ergonomically
-  equivalent to the C# original.
+- New crate `xpmp2` (safe wrappers, mirrors `xplm`'s shape), depending on
+  `xpmp2-sys` and `xplm`.
+- `Multiplayer` (or similar): RAII over `XPMPMultiplayerInit`/
+  `XPMPMultiplayerCleanup` — `init()` returns `Result`/`Option` (the C#
+  original surfaces `XPMPMultiplayerInit`'s error string; this crate's
+  version should too, rather than swallowing it), `Drop` calls cleanup.
+  Sound/contrail/preference/CSL-loading functions hang off this handle or as
+  plain free functions, matching whichever of `xplm::camera`'s
+  single-global-slot pattern or plain free functions fits
+  `XPMPMultiplayerInit`'s own single-instance contract (needs confirming
+  against the header before committing to a shape).
+- An `Aircraft` trait (object-safe, `update_position` at minimum, matching
+  `XPMP2::Aircraft`'s pure-virtual method, with default-implemented methods
+  for the overridable ones) that a caller implements on their own plane
+  state struct; a `Plane` RAII handle registers one through Phase 1's C++
+  shim and destroys it on `Drop` — same RAII shape as every other subsystem
+  in this crate, even though the FFI plumbing underneath (a real C++ object)
+  is different. Naming TBD for both — avoid colliding with `xplm::aircraft`,
+  which is XPLM's own user/AI-aircraft API, a different subsystem entirely.
+- README gains a "Multiplayer (XPMP2)" section once the API stabilizes,
+  type-checked the same way as every other section in this crate (`xpmp2`'s
+  own `tests/readme_examples.rs`, since calling into it also needs a hosted
+  X-Plane process).
+- Not started.

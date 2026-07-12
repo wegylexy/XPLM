@@ -155,7 +155,7 @@ fn main() {
         }
         println!("cargo:rustc-link-lib=dylib=delayimp");
     }
-    // TODO Linux/macOS link flags (bundle-relative rpath, framework search paths) — Phase 1 follow-up.
+    // TODO Linux/macOS link flags (bundle-relative rpath, framework search paths).
 
     println!("cargo:rerun-if-changed={}", headers_dir.display());
 }

@@ -74,10 +74,10 @@ still needs it resolvable on `PATH`. Read the real install location from
 `%LocalAppData%\x-plane_install_12.txt` (or `_11.txt`) rather than hardcoding a
 path — see [README.md](README.md#running-tests-windows) for the one-liner.
 
-## Current phase
+## Current status
 
-Phase 2 (panic-boundary `guard()` + `FlightLoop` RAII/trampoline pattern) is done
-— see git log for what's landed. Remaining phases (3-8: DataRef subsystem, plugin
-lifecycle, menu/processing/instance/camera/display, macros, remaining surfaces,
-parity example) are tracked in [PHASES.md](PHASES.md); keep that file updated as
-phases complete instead of duplicating the breakdown here.
+The pure-XPLM SDK surface (`xplm-sys`/`xplm`/`xplm-macros`, including
+Widgets) is fully ported, with `examples/hello-plugin` and
+`examples/xpl-template` as acceptance tests. Remaining work is XPMP2
+multiplayer support, tracked in [PHASES.md](PHASES.md); keep that file
+updated as work lands instead of duplicating the breakdown here.

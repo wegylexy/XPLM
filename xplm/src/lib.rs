@@ -1,6 +1,5 @@
-//! Safe, idiomatic wrappers over `xplm-sys`.
-//!
-//! Phase 2+ modules (dataref, plugin lifecycle, menus, ...) land here.
+//! Safe, idiomatic wrappers over `xplm-sys`: dataref access, plugin
+//! lifecycle, menus, windows/widgets, and the rest of the XPLM SDK surface.
 
 /// Attribute macro for a plugin's top-level state struct — see
 /// [`xplm_macros::plugin`] for the full example. Sugar over
@@ -24,10 +23,9 @@ pub mod utilities;
 pub mod widget;
 // FlightLoop's underlying XPLMCreateFlightLoop/XPLMDestroyFlightLoop/
 // XPLMScheduleFlightLoop are all `#if defined(XPLM210)` in XPLMProcessing.h
-// (only the legacy XPLMRegisterFlightLoopCallback predates that) — this was
-// missed when the module first landed in Phase 2, since default features
-// always include XPLM210 and the gap only surfaces building a lower feature
-// set. Caught while checking window.rs's own version gating in Phase 5b.
+// (only the legacy XPLMRegisterFlightLoopCallback predates that) — default
+// features always include XPLM210, so this gap only surfaces building a
+// lower feature set explicitly (see CLAUDE.md's "test minimal features").
 #[cfg(feature = "XPLM210")]
 pub mod processing;
 pub mod window;

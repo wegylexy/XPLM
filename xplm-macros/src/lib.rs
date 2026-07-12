@@ -118,9 +118,9 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 ///
 /// `find()` looks up every field via that type's own `find` (already
-/// generic over the `ReadOnly`/`ReadWrite` access marker from Phase 3 —
-/// this macro doesn't need to know which), returning `None` as soon as any
-/// one of them isn't currently registered.
+/// generic over the `ReadOnly`/`ReadWrite` access marker — this macro
+/// doesn't need to know which), returning `None` as soon as any one of them
+/// isn't currently registered.
 #[proc_macro_derive(DataRefContainer, attributes(dataref))]
 pub fn derive_dataref_container(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as DeriveInput);

@@ -1,6 +1,5 @@
 //! Proves `#[xplm::plugin(...)]` and `#[derive(xplm::DataRefContainer)]`
-//! expand to code that actually compiles — the macro-expansion-correctness
-//! check for Phase 6.
+//! expand to code that actually compiles.
 
 #[test]
 fn ui() {

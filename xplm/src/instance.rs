@@ -1,8 +1,8 @@
 //! Instanced object drawing (`XPLMInstance.h`). Builds on
 //! [`crate::scenery::Object`]/[`crate::scenery::DrawInfo`] — depends on
 //! `XPLMDrawInfo_t`/`XPLMObjectRef` from `XPLMScenery.h`, which is why this
-//! landed alongside Scenery rather than back in the Phase 5 window/menu
-//! batch.
+//! module sits alongside `xplm::scenery` rather than `xplm::window`/
+//! `xplm::menu`.
 
 use std::ffi::CString;
 use std::os::raw::c_char;

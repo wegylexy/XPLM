@@ -96,14 +96,21 @@ pub struct DataRef<T: Scalar, A: Access> {
     _access: PhantomData<A>,
 }
 
+// X-Plane datarefs are only ever read/written from the sim's single main
+// thread — same rationale as `FlightLoop`/`Window`/`Menu`'s `unsafe impl
+// Send`. Plugin state holding one still needs to live in a `static
+// Mutex<Option<_>>` (see `register_plugin!`), which requires `Send`.
+unsafe impl<T: Scalar, A: Access> Send for DataRef<T, A> {}
+
 impl<T: Scalar, A: Access> DataRef<T, A> {
     /// Looks up `name` via `XPLMFindDataRef`. Returns `None` if no dataref
     /// with that path is currently registered. The access marker is chosen
-    /// by the caller (or a `#[dataref = "..."]` field's declared type in
-    /// Phase 6) — it is not derived from `XPLMCanWriteDataRef`, since that's
-    /// a runtime property (and can change if a providing plugin unloads)
-    /// while `Access` is a compile-time contract about what code you're
-    /// allowed to write, not a claim about the sim's current state.
+    /// by the caller (or a `#[dataref = "..."]` field's declared type, via
+    /// `#[derive(DataRefContainer)]`) — it is not derived from
+    /// `XPLMCanWriteDataRef`, since that's a runtime property (and can
+    /// change if a providing plugin unloads) while `Access` is a
+    /// compile-time contract about what code you're allowed to write, not a
+    /// claim about the sim's current state.
     pub fn find(name: &str) -> Option<Self> {
         find_raw(name).map(|raw| Self {
             raw,
@@ -194,6 +201,9 @@ pub struct ArrayDataRef<T: ArrayElement, A: Access> {
     _type: PhantomData<T>,
     _access: PhantomData<A>,
 }
+
+// See `DataRef`'s identical `unsafe impl Send` above for the rationale.
+unsafe impl<T: ArrayElement, A: Access> Send for ArrayDataRef<T, A> {}
 
 impl<T: ArrayElement, A: Access> ArrayDataRef<T, A> {
     pub fn find(name: &str) -> Option<Self> {

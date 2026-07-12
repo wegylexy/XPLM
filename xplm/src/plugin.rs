@@ -1,7 +1,7 @@
 //! Plugin lifecycle (`XPLMPlugin.h` + the five required exported callbacks
 //! every `.xpl` must define). `register_plugin!` generates the
-//! `extern "C"` trampolines; Phase 6's `#[plugin(...)]` attribute macro will
-//! be sugar over the same mechanism.
+//! `extern "C"` trampolines; `#[xplm::plugin(...)]` is sugar over the same
+//! mechanism.
 
 use std::ffi::c_void;
 use std::os::raw::{c_char, c_int};
