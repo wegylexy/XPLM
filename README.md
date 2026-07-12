@@ -299,6 +299,38 @@ piece of infrastructure than `xplm` provides today (see `PHASES.md` if you're
 considering building one; it'd need to be a crate-level addition, not a
 per-caller pattern, to be worth shipping).
 
+### Aircraft
+
+`AircraftAccess` is exclusive — only one plugin can hold it at a time —
+same shape as `CameraControl`, but `acquire` tells you whether you got it,
+and takes an optional callback for when you don't:
+
+```rust
+use xplm::aircraft::AircraftAccess;
+
+let access = AircraftAccess::acquire(
+    None, // don't load any AI aircraft models, just take control
+    Some(|| xplm::log("aircraft access is available now\n")),
+);
+
+match access {
+    Some(access) => {
+        access.set_active_aircraft_count(1);
+        // access.set_aircraft_model/disable_ai_for_plane, etc.
+    }
+    None => {
+        // Another plugin holds access; the callback above will run once it
+        // releases it, but you must call acquire() again then to take it —
+        // a notification isn't a grant.
+    }
+}
+```
+
+`access` releases exclusive control (`XPLMReleasePlanes`) when dropped.
+`xplm::aircraft` also has free functions for the user's own aircraft —
+`set_users_aircraft`, `place_user_at_airport`/`place_user_at_location`,
+`aircraft_count`, `nth_aircraft_model` — none of which need `AircraftAccess`.
+
 ## Running tests (Windows)
 
 `xplm-sys` delay-loads `XPLM_64.dll` (it only exists inside a running X-Plane

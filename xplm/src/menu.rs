@@ -6,15 +6,15 @@
 //! demand, the same way the C# code used `Items.IndexOf(this)`.
 
 use std::cell::RefCell;
-use std::ffi::{CString, c_void};
+use std::ffi::{c_void, CString};
 use std::os::raw::c_int;
 use std::rc::Rc;
 
 use xplm_sys::{
-    XPLMAppendMenuItem, XPLMAppendMenuSeparator, XPLMCheckMenuItem, XPLMCheckMenuItemState,
-    XPLMClearAllMenuItems, XPLMCreateMenu, XPLMDestroyMenu, XPLMEnableMenuItem,
-    XPLMFindPluginsMenu, XPLMMenuCheck, XPLMMenuID, XPLMSetMenuItemName, xplm_Menu_Checked,
-    xplm_Menu_NoCheck, xplm_Menu_Unchecked,
+    xplm_Menu_Checked, xplm_Menu_NoCheck, xplm_Menu_Unchecked, XPLMAppendMenuItem,
+    XPLMAppendMenuSeparator, XPLMCheckMenuItem, XPLMCheckMenuItemState, XPLMClearAllMenuItems,
+    XPLMCreateMenu, XPLMDestroyMenu, XPLMEnableMenuItem, XPLMFindPluginsMenu, XPLMMenuCheck,
+    XPLMMenuID, XPLMSetMenuItemName,
 };
 
 #[cfg(feature = "XPLM210")]
@@ -100,9 +100,8 @@ impl Menu {
     pub fn new_in_plugins_menu(name: &str, handler: impl FnMut(i32) + 'static) -> Option<Self> {
         let plugins_menu = unsafe { XPLMFindPluginsMenu() };
         let c_name = CString::new(name).ok()?;
-        let item_index = unsafe {
-            XPLMAppendMenuItem(plugins_menu, c_name.as_ptr(), std::ptr::null_mut(), 0)
-        };
+        let item_index =
+            unsafe { XPLMAppendMenuItem(plugins_menu, c_name.as_ptr(), std::ptr::null_mut(), 0) };
         if item_index < 0 {
             return None;
         }
@@ -286,9 +285,9 @@ impl MenuItem<'_> {
 unsafe extern "C" fn trampoline(in_menu_ref: *mut c_void, in_item_ref: *mut c_void) {
     crate::guard(|| {
         let state: &MenuState = unsafe { &*(in_menu_ref as *const MenuState) };
-        let index = state.items.borrow().iter().position(|slot| {
-            matches!(slot, Some(t) if Rc::as_ptr(t) as *mut c_void == in_item_ref)
-        });
+        let index = state.items.borrow().iter().position(
+            |slot| matches!(slot, Some(t) if Rc::as_ptr(t) as *mut c_void == in_item_ref),
+        );
         if let Some(index) = index {
             (state.handler.borrow_mut())(index as i32);
         }

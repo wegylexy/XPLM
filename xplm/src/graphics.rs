@@ -7,13 +7,13 @@ use std::ffi::CString;
 use std::os::raw::c_int;
 
 use xplm_sys::{
-    XPLMBindTexture2d, XPLMDrawNumber, XPLMDrawString, XPLMDrawTranslucentDarkBox, XPLMFontID,
-    XPLMGenerateTextureNumbers, XPLMGetFontDimensions, XPLMGetTexture, XPLMLocalToWorld,
-    XPLMSetGraphicsState, XPLMTextureID, XPLMWorldToLocal, xplmFont_Basic, xplm_Tex_GeneralInterface,
+    xplmFont_Basic, xplm_Tex_GeneralInterface, XPLMBindTexture2d, XPLMDrawNumber, XPLMDrawString,
+    XPLMDrawTranslucentDarkBox, XPLMFontID, XPLMGenerateTextureNumbers, XPLMGetFontDimensions,
+    XPLMGetTexture, XPLMLocalToWorld, XPLMSetGraphicsState, XPLMTextureID, XPLMWorldToLocal,
 };
 
 #[cfg(feature = "XPLM200")]
-use xplm_sys::{XPLMMeasureString, xplmFont_Proportional};
+use xplm_sys::{xplmFont_Proportional, XPLMMeasureString};
 
 /// The OpenGL fixed-function state `XPLMSetGraphicsState` controls. Prefer
 /// setting all fields explicitly (there is no "default" state, per the SDK

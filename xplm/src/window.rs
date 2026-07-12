@@ -19,18 +19,18 @@ use std::ffi::CString;
 use std::os::raw::{c_char, c_int};
 
 use xplm_sys::{
-    XPLMBringWindowToFront, XPLMCreateWindow_t, XPLMCreateWindowEx, XPLMCursorStatus,
+    xplm_CursorArrow, xplm_CursorCustom, xplm_CursorDefault, xplm_CursorHidden, xplm_MouseDown,
+    xplm_MouseUp, XPLMBringWindowToFront, XPLMCreateWindowEx, XPLMCreateWindow_t, XPLMCursorStatus,
     XPLMDestroyWindow, XPLMGetWindowGeometry, XPLMGetWindowIsVisible, XPLMHasKeyboardFocus,
     XPLMIsWindowInFront, XPLMKeyFlags, XPLMMouseStatus, XPLMSetWindowGeometry,
-    XPLMSetWindowIsVisible, XPLMTakeKeyboardFocus, XPLMWindowID, xplm_CursorArrow,
-    xplm_CursorCustom, xplm_CursorDefault, xplm_CursorHidden, xplm_MouseDown, xplm_MouseUp,
+    XPLMSetWindowIsVisible, XPLMTakeKeyboardFocus, XPLMWindowID,
 };
 
 #[cfg(feature = "XPLM300")]
-use xplm_sys::{XPLMSetWindowTitle, XPLMWindowLayer, xplm_WindowLayerFloatingWindows};
+use xplm_sys::{xplm_WindowLayerFloatingWindows, XPLMSetWindowTitle, XPLMWindowLayer};
 
 #[cfg(feature = "XPLM301")]
-use xplm_sys::{XPLMWindowDecoration, xplm_WindowDecorationRoundRectangle};
+use xplm_sys::{xplm_WindowDecorationRoundRectangle, XPLMWindowDecoration};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MouseStatus {

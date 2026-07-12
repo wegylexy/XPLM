@@ -7,8 +7,8 @@ use std::ffi::c_void;
 use std::os::raw::c_int;
 
 use xplm_sys::{
-    XPLMCameraPosition_t, XPLMControlCamera, XPLMDontControlCamera, xplm_ControlCameraForever,
-    xplm_ControlCameraUntilViewChanges,
+    xplm_ControlCameraForever, xplm_ControlCameraUntilViewChanges, XPLMCameraPosition_t,
+    XPLMControlCamera, XPLMDontControlCamera,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -87,7 +87,10 @@ pub struct CameraControl {
 unsafe impl Send for CameraControl {} // see FlightLoop's identical rationale.
 
 impl CameraControl {
-    pub fn take(duration: CameraControlDuration, callback: impl FnMut(bool) -> Option<CameraPosition> + 'static) -> Self {
+    pub fn take(
+        duration: CameraControlDuration,
+        callback: impl FnMut(bool) -> Option<CameraPosition> + 'static,
+    ) -> Self {
         let boxed: Box<Callback> = Box::new(callback);
         let refcon = Box::into_raw(Box::new(boxed));
         unsafe {

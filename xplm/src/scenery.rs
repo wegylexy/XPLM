@@ -2,15 +2,15 @@
 //! loading. `Instance` (`xplm::instance`) builds on [`Object`]/[`DrawInfo`]
 //! from here.
 
-use std::ffi::CString;
 #[cfg(feature = "XPLM210")]
 use std::ffi::c_void;
+use std::ffi::CString;
 use std::os::raw::c_int;
 
 use xplm_sys::{
-    XPLMCreateProbe, XPLMDestroyProbe, XPLMLoadObject, XPLMObjectRef, XPLMProbeInfo_t,
-    XPLMProbeRef, XPLMProbeTerrainXYZ, XPLMUnloadObject, xplm_ProbeHitTerrain, xplm_ProbeMissed,
-    xplm_ProbeY,
+    xplm_ProbeHitTerrain, xplm_ProbeMissed, xplm_ProbeY, XPLMCreateProbe, XPLMDestroyProbe,
+    XPLMLoadObject, XPLMObjectRef, XPLMProbeInfo_t, XPLMProbeRef, XPLMProbeTerrainXYZ,
+    XPLMUnloadObject,
 };
 
 #[cfg(feature = "XPLM210")]
@@ -181,7 +181,11 @@ impl Object {
         let boxed: Box<AsyncCallback> = Box::new(callback);
         let refcon = Box::into_raw(Box::new(boxed));
         unsafe {
-            XPLMLoadObjectAsync(c_path.as_ptr(), Some(load_object_trampoline), refcon as *mut c_void);
+            XPLMLoadObjectAsync(
+                c_path.as_ptr(),
+                Some(load_object_trampoline),
+                refcon as *mut c_void,
+            );
         }
         true
     }

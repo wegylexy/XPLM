@@ -7,6 +7,7 @@
 
 #![allow(dead_code)]
 
+use xplm::aircraft::AircraftAccess;
 use xplm::command::{Command, CommandHandler, CommandPhase};
 use xplm::dataref::{ReadOnly, ReadWrite};
 use xplm::instance::Instance;
@@ -46,7 +47,9 @@ fn _readme_plugin_start() -> (Menu, FlightLoop) {
     let telemetry = Telemetry::find().expect("dataref(s) not found");
     let flight_loop = FlightLoop::new(FlightLoopPhase::AfterFlightModel, move |_, _, _| {
         let lat = telemetry.latitude.get();
-        telemetry.override_joystick.set(if lat > 0.0 { 1 } else { 0 });
+        telemetry
+            .override_joystick
+            .set(if lat > 0.0 { 1 } else { 0 });
         -1.0
     });
     flight_loop.schedule(-1.0, true);
@@ -148,5 +151,21 @@ mod readme_async_bridge {
     #[allow(dead_code)]
     fn _typecheck() -> LoadObject {
         load_object("Resources/plugins/MyPlugin/my_object.obj")
+    }
+}
+
+// README "Aircraft" snippet.
+fn _readme_aircraft_access() -> Option<AircraftAccess> {
+    let access = AircraftAccess::acquire(
+        None,
+        Some(|| xplm::log("aircraft access is available now\n")),
+    );
+
+    match access {
+        Some(access) => {
+            access.set_active_aircraft_count(1);
+            Some(access)
+        }
+        None => None,
     }
 }

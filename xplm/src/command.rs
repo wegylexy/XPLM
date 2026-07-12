@@ -3,13 +3,13 @@
 //! whichever plugin created it); `CommandHandler` is the RAII + trampoline
 //! wrapper, same shape as `FlightLoop`/`Menu`/etc.
 
-use std::ffi::{CString, c_void};
+use std::ffi::{c_void, CString};
 use std::os::raw::c_int;
 
 use xplm_sys::{
-    XPLMCommandBegin, XPLMCommandEnd, XPLMCommandOnce, XPLMCommandPhase, XPLMCommandRef,
-    XPLMCreateCommand, XPLMFindCommand, XPLMRegisterCommandHandler, XPLMUnregisterCommandHandler,
-    xplm_CommandBegin, xplm_CommandEnd,
+    xplm_CommandBegin, xplm_CommandEnd, XPLMCommandBegin, XPLMCommandEnd, XPLMCommandOnce,
+    XPLMCommandPhase, XPLMCommandRef, XPLMCreateCommand, XPLMFindCommand,
+    XPLMRegisterCommandHandler, XPLMUnregisterCommandHandler,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

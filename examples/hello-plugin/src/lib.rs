@@ -43,7 +43,14 @@ impl XPlanePlugin for HelloPlugin {
             .on_draw(|window| {
                 let (left, top, right, bottom) = window.geometry();
                 graphics::draw_translucent_dark_box(left, top, right, bottom);
-                graphics::draw_string([1.0, 1.0, 1.0], left + 5, top - 15, "Hello from Rust!", None, Font::Basic);
+                graphics::draw_string(
+                    [1.0, 1.0, 1.0],
+                    left + 5,
+                    top - 15,
+                    "Hello from Rust!",
+                    None,
+                    Font::Basic,
+                );
             })
             .build()
             .expect("failed to create hello-plugin window");

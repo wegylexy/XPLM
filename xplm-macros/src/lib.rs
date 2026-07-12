@@ -202,10 +202,16 @@ fn path_lit_from_attr(attr: &syn::Attribute) -> syn::Result<LitStr> {
         ));
     };
     let Expr::Lit(expr_lit) = &nv.value else {
-        return Err(syn::Error::new_spanned(&nv.value, "expected a string literal"));
+        return Err(syn::Error::new_spanned(
+            &nv.value,
+            "expected a string literal",
+        ));
     };
     let Lit::Str(s) = &expr_lit.lit else {
-        return Err(syn::Error::new_spanned(&expr_lit.lit, "expected a string literal"));
+        return Err(syn::Error::new_spanned(
+            &expr_lit.lit,
+            "expected a string literal",
+        ));
     };
     Ok(s.clone())
 }

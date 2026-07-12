@@ -10,6 +10,7 @@ pub use xplm_macros::plugin;
 /// struct — see [`xplm_macros::DataRefContainer`] for the full example.
 pub use xplm_macros::DataRefContainer;
 
+pub mod aircraft;
 pub mod camera;
 pub mod command;
 pub mod dataref;
