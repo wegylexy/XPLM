@@ -1,12 +1,12 @@
 # Remaining phases
 
-Phases 0 through 5b are done — see git log for full rationale (each commit
+Phases 0 through 6 are done — see git log for full rationale (each commit
 message carries the detail that used to live here). Summary below; only
-Phases 6-8 are described in full, since those are what's actually left. Each
+Phases 7-8 are described in full, since those are what's actually left. Each
 phase should land as its own commit(s) and be testable before moving to the
 next.
 
-## Done (0-5b)
+## Done (0-6)
 
 - **0/1** — Orphan tree with only the SDK moved over (later made gitignored,
   downloaded per README instead). Versioned `xplm-sys` FFI: Cargo features
@@ -42,16 +42,21 @@ next.
   compiler warning, not a silent trap. Caught and fixed two version-gating
   bugs by testing `--features XPLM200` explicitly, not just the default set
   — now a standing check for every future module.
-
-## Phase 6 — `xplm-macros`
-
-- `#[plugin(name = ..., signature = ..., description = ...)]` attribute macro
-  generating the Phase 4 boilerplate (sugar over `register_plugin!`).
-- `#[derive(DataRefContainer)]` generating Phase 3 lookups from
-  `#[dataref = "sim/..."]` field attributes, `find()` returning `Option<Self>`.
-- Testable: `trybuild` UI tests for macro-expansion correctness; a
-  snapshot/expand test comparing macro output against the hand-written
-  equivalent.
+- **6** — `#[xplm::plugin(name = ..., signature = ..., description = ...)]`
+  attribute macro: expands to the annotated struct unchanged plus
+  `register_plugin!($t, name = ..., signature = ..., description = ...)`.
+  Required loosening Phase 4's `XPlanePlugin::NAME`/`SIGNATURE`/`DESCRIPTION`
+  to defaulted (`= ""`) associated consts and adding a second
+  `register_plugin!` macro arm taking metadata as explicit arguments —
+  otherwise the attribute (which only sees the struct item, not a later
+  separate `impl XPlanePlugin for MyPlugin` block) would have no way to
+  supply the trait's required consts without the user redundantly
+  re-declaring them. `#[derive(xplm::DataRefContainer)]` generates
+  `find() -> Option<Self>` from `#[dataref = "sim/..."]`-tagged fields,
+  calling each field type's own `find` (works unchanged for both
+  `ReadOnly<T>`/`ReadWrite<T>`, since the derive doesn't need to know which).
+  `examples/hello-plugin` converted to the attribute-macro flow; `trybuild`
+  `.pass(...)` tests confirm both macros expand to code that compiles.
 
 ## Phase 7 — Remaining surfaces
 

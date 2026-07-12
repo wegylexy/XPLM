@@ -2,6 +2,14 @@
 //!
 //! Phase 2+ modules (dataref, plugin lifecycle, menus, ...) land here.
 
+/// Attribute macro for a plugin's top-level state struct — see
+/// [`xplm_macros::plugin`] for the full example. Sugar over
+/// [`register_plugin!`]'s metadata-argument form.
+pub use xplm_macros::plugin;
+/// Derives `find() -> Option<Self>` for a `#[dataref = "..."]`-tagged
+/// struct — see [`xplm_macros::DataRefContainer`] for the full example.
+pub use xplm_macros::DataRefContainer;
+
 pub mod camera;
 pub mod dataref;
 pub mod graphics;

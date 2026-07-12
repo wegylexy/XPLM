@@ -50,6 +50,142 @@ defined together):
 Only the versions present in the vendored `SDK/CHeaders` are exposed; there is no
 `XPLM430` feature even if a newer SDK zip defines it, until this crate is updated.
 
+## Usage
+
+A full worked example lives in [`examples/hello-plugin`](examples/hello-plugin) —
+it combines everything below plus a `FlightLoop` heartbeat, a `Window`, and
+`xplm::graphics` drawing. The snippets here isolate each piece.
+
+### A plugin
+
+`#[xplm::plugin(...)]` supplies the plugin's name/signature/description and wires
+up the five `extern "C"` exports X-Plane requires; you implement
+`xplm::plugin::XPlanePlugin` for the plugin's lifecycle. This example wires up
+everything in one place: a menu item click handler, and a `FlightLoop` that
+reads and writes datarefs every cycle via `#[derive(DataRefContainer)]`:
+
+```rust
+use xplm::dataref::{ReadOnly, ReadWrite};
+use xplm::menu::Menu;
+use xplm::plugin::XPlanePlugin;
+use xplm::processing::{FlightLoop, FlightLoopPhase};
+
+#[derive(xplm::DataRefContainer)]
+struct Telemetry {
+    #[dataref = "sim/flightmodel/position/latitude"]
+    latitude: ReadOnly<f64>,
+    #[dataref = "sim/operation/override/override_joystick"]
+    override_joystick: ReadWrite<i32>,
+}
+
+#[xplm::plugin(
+    name = "My Plugin",
+    signature = "com.example.my-plugin",
+    description = "Does a thing"
+)]
+struct MyPlugin {
+    // Held only to keep the menu/flight loop registered for the plugin's
+    // lifetime; dropping them (in `stop`, or when `MyPlugin` is dropped)
+    // unregisters the native objects.
+    _menu: Menu,
+    _flight_loop: FlightLoop,
+}
+
+impl XPlanePlugin for MyPlugin {
+    // NAME/SIGNATURE/DESCRIPTION come from #[xplm::plugin(...)] above —
+    // don't override them here.
+
+    fn start() -> Self {
+        let menu = Menu::new_in_plugins_menu("My Plugin", |item_index| {
+            // Click handling: item_index tells you which item, looked up
+            // fresh each time (see "Menus, including nested submenus" below
+            // for why that matters once items can be removed).
+            xplm::log(&format!("clicked item {item_index}\n"));
+        })
+        .expect("failed to create menu");
+        menu.add_item("Do the thing");
+
+        let telemetry = Telemetry::find().expect("dataref(s) not found");
+        let flight_loop = FlightLoop::new(FlightLoopPhase::AfterFlightModel, move |_, _, _| {
+            // Dataref read/write every flight loop cycle: read latitude,
+            // write a derived value back. `telemetry` is moved into the
+            // closure, so it (and the datarefs it holds) live exactly as
+            // long as the flight loop does.
+            let lat = telemetry.latitude.get();
+            telemetry.override_joystick.set(if lat > 0.0 { 1 } else { 0 });
+            -1.0 // run again next cycle
+        });
+        flight_loop.schedule(-1.0, true); // XPLMCreateFlightLoop starts unscheduled
+
+        Self {
+            _menu: menu,
+            _flight_loop: flight_loop,
+        }
+    }
+
+    // enable/disable/stop/receive_message all have no-op defaults; override
+    // whichever ones you need.
+}
+```
+
+If you'd rather not use the attribute macro, `xplm::register_plugin!(MyPlugin)`
+does the same thing reading `NAME`/`SIGNATURE`/`DESCRIPTION` off your own
+`impl XPlanePlugin` block instead (see `xplm::plugin`'s docs for both forms).
+
+### Menus, including nested submenus
+
+`Menu::add_item` returns a `MenuItem` handle; pass one to `Menu::new_submenu` to
+anchor a submenu at that item, nesting as deep as you like:
+
+```rust
+use xplm::menu::Menu;
+
+// Top-level menu, under X-Plane's Plugins menu.
+let menu = Menu::new_in_plugins_menu("My Plugin", |item_index| {
+    xplm::log(&format!("clicked item {item_index}\n"));
+})
+.expect("failed to create menu");
+
+let settings_item = menu.add_item("Settings").expect("failed to add item");
+
+// A submenu anchored at that item — clicking items on it runs its own
+// handler, independent of the parent menu's.
+let settings_menu = Menu::new_submenu(&menu, &settings_item, "Settings", |item_index| {
+    xplm::log(&format!("settings item {item_index} clicked\n"));
+})
+.expect("failed to create submenu");
+
+settings_menu.add_item("Option A");
+settings_menu.add_item("Option B");
+```
+
+`menu`/`settings_menu` must be kept alive for as long as you want the menus to
+exist — dropping either destroys it (and, for `menu`, everything nested under
+it).
+
+### Reading datarefs with `#[derive(DataRefContainer)]`
+
+Tag each field with the dataref path it should be found by; `find()` looks all
+of them up at once, failing if any single one isn't currently registered:
+
+```rust
+use xplm::dataref::{ReadOnly, ReadWrite};
+
+#[derive(xplm::DataRefContainer)]
+struct AircraftTelemetry {
+    #[dataref = "sim/flightmodel/position/latitude"]
+    latitude: ReadOnly<f64>,
+    #[dataref = "sim/flightmodel/position/longitude"]
+    longitude: ReadOnly<f64>,
+    #[dataref = "sim/cockpit2/engine/actuators/throttle_ratio_all"]
+    throttle: ReadWrite<f32>,
+}
+
+let telemetry = AircraftTelemetry::find().expect("dataref(s) not found");
+let lat = telemetry.latitude.get();
+telemetry.throttle.set(0.75); // only compiles because it's ReadWrite<f32>
+```
+
 ## Running tests (Windows)
 
 `xplm-sys` delay-loads `XPLM_64.dll` (it only exists inside a running X-Plane

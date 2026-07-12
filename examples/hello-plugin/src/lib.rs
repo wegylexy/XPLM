@@ -1,5 +1,5 @@
-//! Minimal example plugin proving Phases 2-5b end to end: plugin lifecycle
-//! (this crate's `XPlanePlugin` impl + `register_plugin!`), the panic-guarded
+//! Minimal example plugin proving Phases 2-6 end to end: plugin lifecycle
+//! via the `#[xplm::plugin(...)]` attribute macro, the panic-guarded
 //! trampoline pattern, a `FlightLoop` RAII wrapper, a `Menu`, a `Window`, and
 //! `xplm::graphics` drawing.
 //!
@@ -12,6 +12,11 @@ use xplm::plugin::XPlanePlugin;
 use xplm::processing::{FlightLoop, FlightLoopPhase};
 use xplm::window::Window;
 
+#[xplm::plugin(
+    name = "Hello Plugin (Rust)",
+    signature = "org.xplm-rust.hello-plugin",
+    description = "Phase 4-6 example: plugin lifecycle + flight loop + menu + window + graphics."
+)]
 struct HelloPlugin {
     // Held only to keep the flight loop/menu/window registered for the
     // plugin's lifetime; dropping them (in `stop`) unregisters the native
@@ -22,9 +27,8 @@ struct HelloPlugin {
 }
 
 impl XPlanePlugin for HelloPlugin {
-    const NAME: &'static str = "Hello Plugin (Rust)";
-    const SIGNATURE: &'static str = "org.xplm-rust.hello-plugin";
-    const DESCRIPTION: &'static str = "Phase 4 example: plugin lifecycle + flight loop.";
+    // NAME/SIGNATURE/DESCRIPTION come from #[xplm::plugin(...)] above, not
+    // overridden here — see register_plugin!'s two forms in xplm::plugin.
 
     fn start() -> Self {
         xplm::log("hello-plugin: XPluginStart\n");
@@ -76,5 +80,3 @@ impl XPlanePlugin for HelloPlugin {
         xplm::log("hello-plugin: XPluginStop\n");
     }
 }
-
-xplm::register_plugin!(HelloPlugin);

@@ -14,10 +14,14 @@ pub use xplm_sys::XPLMPluginID;
 /// Disable/ReceiveMessage`).
 pub trait XPlanePlugin: Sized + 'static {
     /// Human-readable plugin name, shown in X-Plane's Plugin Admin window.
-    const NAME: &'static str;
+    /// Defaulted to empty rather than required, so `#[xplm::plugin(name =
+    /// ..., signature = ..., description = ...)]` can supply this instead
+    /// without forcing a redundant override here — see `register_plugin!`'s
+    /// two forms.
+    const NAME: &'static str = "";
     /// Unique reverse-DNS-style identifier (e.g. `"com.example.myplugin"`).
-    const SIGNATURE: &'static str;
-    const DESCRIPTION: &'static str;
+    const SIGNATURE: &'static str = "";
+    const DESCRIPTION: &'static str = "";
 
     /// Called once when the plugin is loaded. Corresponds to `XPluginStart`
     /// returning success (1) — unlike the raw SDK, there's no way to signal
@@ -74,12 +78,32 @@ pub unsafe fn write_c_string(dest: *mut c_char, value: &str) {
 /// `XPluginReceiveMessage`) for `$t: XPlanePlugin`. Call this exactly once,
 /// at the root of your plugin's `cdylib` crate.
 ///
+/// Two forms:
+/// - `register_plugin!(MyPlugin)` reads `NAME`/`SIGNATURE`/`DESCRIPTION` off
+///   `MyPlugin`'s `impl XPlanePlugin` (override the trait's defaults there).
+/// - `register_plugin!(MyPlugin, name = "...", signature = "...", description
+///   = "...")` supplies them directly instead — this is what
+///   `#[xplm::plugin(...)]` expands to, so a plugin using that attribute
+///   doesn't need to (and shouldn't) also override the consts.
+///
 /// Every trampoline is wrapped in [`crate::guard`] — a panic in any
 /// lifecycle method is caught and logged rather than unwinding into
 /// X-Plane.
 #[macro_export]
 macro_rules! register_plugin {
     ($t:ty) => {
+        $crate::register_plugin!(
+            @impl
+            $t,
+            <$t as $crate::plugin::XPlanePlugin>::NAME,
+            <$t as $crate::plugin::XPlanePlugin>::SIGNATURE,
+            <$t as $crate::plugin::XPlanePlugin>::DESCRIPTION
+        );
+    };
+    ($t:ty, name = $name:expr, signature = $signature:expr, description = $description:expr) => {
+        $crate::register_plugin!(@impl $t, $name, $signature, $description);
+    };
+    (@impl $t:ty, $name:expr, $signature:expr, $description:expr) => {
         static XPLM_PLUGIN_STATE: ::std::sync::Mutex<::std::option::Option<$t>> =
             ::std::sync::Mutex::new(::std::option::Option::None);
 
@@ -90,18 +114,9 @@ macro_rules! register_plugin {
             out_desc: *mut ::std::os::raw::c_char,
         ) -> ::std::os::raw::c_int {
             unsafe {
-                $crate::plugin::write_c_string(
-                    out_name,
-                    <$t as $crate::plugin::XPlanePlugin>::NAME,
-                );
-                $crate::plugin::write_c_string(
-                    out_sig,
-                    <$t as $crate::plugin::XPlanePlugin>::SIGNATURE,
-                );
-                $crate::plugin::write_c_string(
-                    out_desc,
-                    <$t as $crate::plugin::XPlanePlugin>::DESCRIPTION,
-                );
+                $crate::plugin::write_c_string(out_name, $name);
+                $crate::plugin::write_c_string(out_sig, $signature);
+                $crate::plugin::write_c_string(out_desc, $description);
             }
             $crate::guard(|| {
                 let plugin = <$t as $crate::plugin::XPlanePlugin>::start();
