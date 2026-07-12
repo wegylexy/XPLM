@@ -103,16 +103,49 @@ testable before moving to the next.
   exercised in the example (nothing to sensibly demo without a live camera
   to observe) — covered by its unit-level type conversions only.
 
-## Phase 5b — Display/Graphics (windows + drawing)
+## Phase 5b — Windows (done); Graphics still open
 
-- Scope out from Phase 5 above. `XPLMCreateWindowEx` and its ~8 callbacks
-  (draw, mouse click, key, cursor, mouse wheel, right-click if present) each
-  need their own boxed-closure-behind-a-refcon trampoline, likely grouped
-  behind a single `Window` builder rather than one closure per callback to
-  keep the call site from becoming an 8-closure constructor.
-- `XPLMGraphics.h` (drawing primitives, coordinate conversion) is mostly
-  stateless free functions — much lower effort than the window surface;
-  can land alongside or slightly ahead of it.
+- `xplm::window::Window`/`WindowBuilder` (`XPLMCreateWindowEx`): the SDK
+  requires all five core callbacks (draw/mouse-click/key/cursor/mouse-wheel)
+  to be non-null, so `WindowBuilder` defaults each to a no-op/pass-through
+  closure — you only set `.on_draw(...)`/`.on_mouse_click(...)`/etc. for the
+  ones you actually need, rather than a five-or-six-closure constructor.
+  `.on_right_click(...)` (`XPLM300`+) follows the same optional pattern.
+  `WindowRef` is a `Copy`, non-owning handle (geometry/visibility/title/
+  focus/front-ness getters+setters) passed into every callback and returned
+  by `Window::handle()`, separate from the owning `Window` so callbacks and
+  outside code (e.g. a menu handler toggling window visibility, as
+  `examples/hello-plugin` now does) can both hold a reference without
+  fighting over ownership. Unlike `Menu`, a window has no child-index-space
+  that goes stale, so the identity-lookup pattern doesn't apply here — this
+  is a plain boxed-closures-behind-a-refcon trampoline set, `FlightLoop`'s
+  shape.
+- Hit and fixed a real `AssertUnwindSafe` + disjoint-closure-capture pitfall
+  while wiring the mouse-click trampoline: capturing `&RefCell<_>` (even
+  wrapped in `AssertUnwindSafe`) across `guard()`'s boundary fails, because
+  edition-2021 disjoint capture grabs the wrapper's inner field directly,
+  bypassing the blanket `UnwindSafe` impl the wrapper exists to provide. Fix
+  was to capture only the raw `refcon` pointer (matching every other
+  trampoline in this crate) and dereference it inside the closure body,
+  never capturing a typed `&RefCell` from the enclosing scope.
+- Building this surfaced two version-gating bugs, now fixed:
+  - `xplm::processing` (`FlightLoop`, Phase 2) uses `XPLMCreateFlightLoop`/
+    `XPLMDestroyFlightLoop`/`XPLMScheduleFlightLoop`, all `#if defined(XPLM210)`
+    in the header, but the module itself was never `cfg`-gated — invisible
+    under default features (which always include `XPLM210`), but a hard
+    build failure under `--features XPLM200` alone. Now
+    `#[cfg(feature = "XPLM210")]` on `pub mod processing;` in `lib.rs`.
+  - `window.rs` initially over-gated `WindowRef::bring_to_front`/`is_in_front`
+    behind `XPLM300`, but `XPLMBringWindowToFront`/`XPLMIsWindowInFront` are
+    actually ungated in the header (available since the legacy API) — fixed
+    by removing the incorrect `cfg`.
+  - Caught by actually building `--no-default-features --features XPLM200`
+    as a check, not just the default feature set — worth doing for every
+    future module, not just this one.
+- **Still open**: `XPLMGraphics.h` (drawing primitives, coordinate
+  conversion) — mostly stateless free functions, lower effort than the
+  window surface. Not done in this pass; `examples/hello-plugin`'s window
+  draw callback is a no-op as a result (there's nothing to draw with yet).
 
 ## Phase 6 — `xplm-macros`
 

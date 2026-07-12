@@ -6,7 +6,15 @@ pub mod camera;
 pub mod dataref;
 pub mod menu;
 pub mod plugin;
+// FlightLoop's underlying XPLMCreateFlightLoop/XPLMDestroyFlightLoop/
+// XPLMScheduleFlightLoop are all `#if defined(XPLM210)` in XPLMProcessing.h
+// (only the legacy XPLMRegisterFlightLoopCallback predates that) — this was
+// missed when the module first landed in Phase 2, since default features
+// always include XPLM210 and the gap only surfaces building a lower feature
+// set. Caught while checking window.rs's own version gating in Phase 5b.
+#[cfg(feature = "XPLM210")]
 pub mod processing;
+pub mod window;
 
 #[cfg(not(test))]
 use std::ffi::CString;
