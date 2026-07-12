@@ -1,0 +1,22 @@
+[package]
+name = "xpmp2"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+xpmp2-sys = { path = "../xpmp2-sys" }
+xplm = { path = "../xplm", default-features = false }
+
+[features]
+XPLM200 = ["xplm/XPLM200"]
+XPLM210 = ["XPLM200", "xplm/XPLM210"]
+XPLM300 = ["XPLM210", "xplm/XPLM300"]
+XPLM301 = ["XPLM300", "xplm/XPLM301"]
+XPLM302 = ["XPLM301", "xplm/XPLM302"]
+XPLM303 = ["XPLM302", "xplm/XPLM303"]
+XPLM400 = ["XPLM303", "xplm/XPLM400"]
+XPLM410 = ["XPLM400", "xplm/XPLM410"]
+XPLM420 = ["XPLM410", "xplm/XPLM420"]
+
+default = ["XPLM420"]

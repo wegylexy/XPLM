@@ -99,32 +99,55 @@ it exactly like every `XPLM*.h` header already ported.
   members per-symbol, so resolving an `XPMPMultiplayer.cpp` symbol doesn't
   prove `shim.cpp`'s object file got linked too.
 
-## Phase 2 — XPMP2 safe wrapper
+## Phase 2 — XPMP2 safe wrapper (done)
 
-- New crate `xpmp2` (safe wrappers, mirrors `xplm`'s shape), depending on
-  `xpmp2-sys` and `xplm`.
-- `Multiplayer` (or similar): RAII over `XPMPMultiplayerInit`/
-  `XPMPMultiplayerCleanup` — `init()` returns `Result`/`Option` (the C#
-  original surfaces `XPMPMultiplayerInit`'s error string; this crate's
-  version should too, rather than swallowing it), `Drop` calls cleanup.
-  Sound/contrail/preference/CSL-loading functions hang off this handle or as
-  plain free functions, matching whichever of `xplm::camera`'s
-  single-global-slot pattern or plain free functions fits
-  `XPMPMultiplayerInit`'s own single-instance contract (needs confirming
-  against the header before committing to a shape).
-- An `Aircraft` trait (object-safe, `update_position` at minimum, matching
-  `XPMP2::Aircraft`'s pure-virtual method, with default-implemented methods
-  for the overridable ones) that a caller implements on their own plane
-  state struct; a `Plane` RAII handle registers one through Phase 1's C++
-  shim and destroys it on `Drop` — same RAII shape as every other subsystem
-  in this crate, even though the FFI plumbing underneath (a real C++ object)
-  is different. Naming TBD for both — avoid colliding with `xplm::aircraft`,
-  which is XPLM's own user/AI-aircraft API, a different subsystem entirely.
-- README gains a "Multiplayer (XPMP2)" section once the API stabilizes,
-  type-checked the same way as every other section in this crate (`xpmp2`'s
-  own `tests/readme_examples.rs`, since calling into it also needs a hosted
-  X-Plane process).
-- Not started.
+- New crate `xpmp2` (safe wrappers, mirrors `xplm`'s shape and its
+  `XPLM200`-`XPLM420` feature cascade), depending on `xpmp2-sys` and `xplm`.
+- `Multiplayer`: RAII over `XPMPMultiplayerInit`/`XPMPMultiplayerCleanup`.
+  `init()` returns `Result<Self, String>`, surfacing `XPMPMultiplayerInit`'s
+  own error string on failure (it returns an empty string on success — that's
+  the `Ok`/`Err` split) rather than swallowing it. `Drop` calls
+  `XPMPMultiplayerCleanup`. Enforced single-instance via a process-wide
+  `AtomicBool` (panics on a second concurrent `init()`) rather than
+  `xplm::camera`'s single-global-slot shape — `XPMPMultiplayerInit` isn't
+  slot-based, it's a one-shot global the whole library assumes runs exactly
+  once between `XPluginStart`/`XPluginStop`, so a hard panic on double-init
+  is more honest than silently replacing a slot. Not `Send`/`Sync`
+  (`PhantomData<*const ()>`) — same main-thread-only contract as the rest of
+  XPLM/XPMP2. Sound/contrail/preference/CSL-loading free functions
+  (`XPMPLoadCSLPackage` etc.) aren't wrapped yet — left for whenever an
+  example plugin actually needs to load a CSL package end-to-end.
+- `Aircraft` trait: single method `update_position(&mut self, plane:
+  &PlaneHandle, elapsed_since_last_call: f32, fl_counter: i32)`, matching
+  `XPMP2::Aircraft`'s one pure-virtual method. Only that one method for
+  now — the other overridable virtuals (`GetFlightId`/`GetAoA`/
+  `SoundGetName`/etc.) aren't forwarded through the shim yet either (see
+  Phase 1's note), so there's nothing yet to default-implement.
+- `PlaneHandle<'a>`: a borrowed-not-owned view over the shim's
+  `XPMP2ShimAircraft*`, passed into `update_position` so an `Aircraft` impl
+  can't reach (and so can't accidentally destroy) its own owning `Plane`.
+  Wraps every shim getter/setter (mode-S-id, valid, visible, world/local
+  location, pitch/heading/roll, on-ground, velocity, label, indexed
+  dataRef array access).
+- `Plane<'m>`: RAII handle over `xpmp2_shim_aircraft_create`/`_destroy`,
+  borrowing a `&'m Multiplayer` so a plane can't outlive (or be created
+  without) an initialized library. Holds a heap-boxed `Refcon { aircraft:
+  Box<dyn Aircraft>, raw: *mut XPMP2ShimAircraft }` at a stable address —
+  that's the pointer actually handed to the shim as `refcon` — so the boxed
+  trait object survives exactly as long as the shim might still call back
+  into it. The `update_position` trampoline goes through `xplm::guard()`,
+  same panic-boundary rule as every other XPLM callback in this workspace.
+- Naming settled: `xpmp2::Aircraft`/`xpmp2::Plane` vs. `xplm::aircraft`
+  (XPLM's own user/AI-aircraft API) don't collide since they live in
+  different crates; a caller `use`-ing both qualifies by crate name.
+- README/`readme_examples.rs` for this crate: **not started yet** — held
+  until an actual plane-creation flow (CSL package path, `mode_s_id`
+  allocation convention) has been exercised in an example plugin, so the
+  README example reflects real usage rather than a speculative API demo.
+- Verified: `cargo build -p xpmp2` / `cargo test -p xpmp2` clean under
+  default features and `--no-default-features --features XPLM200`; full
+  `cargo build --workspace` / `cargo test --workspace` (now including this
+  crate) green too.
 
 ## Phase 3 — CSL package streaming/cache client (feature-gated, in front of XPMP2)
 
