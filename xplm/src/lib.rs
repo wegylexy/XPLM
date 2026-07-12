@@ -20,6 +20,8 @@ pub mod menu;
 pub mod plugin;
 pub mod scenery;
 pub mod utilities;
+#[cfg(feature = "widgets")]
+pub mod widget;
 // FlightLoop's underlying XPLMCreateFlightLoop/XPLMDestroyFlightLoop/
 // XPLMScheduleFlightLoop are all `#if defined(XPLM210)` in XPLMProcessing.h
 // (only the legacy XPLMRegisterFlightLoopCallback predates that) — this was

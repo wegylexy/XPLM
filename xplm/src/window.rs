@@ -148,6 +148,11 @@ impl From<WindowLayer> for XPLMWindowLayer {
 pub struct WindowRef(XPLMWindowID);
 
 impl WindowRef {
+    #[cfg(feature = "widgets")]
+    pub(crate) fn from_raw(id: XPLMWindowID) -> Self {
+        Self(id)
+    }
+
     /// `(left, top, right, bottom)` — boxels for a window created via
     /// [`WindowBuilder`], pixels for a legacy `XPLMCreateWindow` one (not
     /// exposed by this crate).

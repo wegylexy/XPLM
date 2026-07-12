@@ -106,7 +106,7 @@ next.
   intentionally *not* wrapped — this crate caps version support at
   `XPLM420` — rather than merely deferred.
 
-## Phase 7b — remaining Utilities (done); Widgets, XPMP2 still open
+## Phase 7b — remaining Utilities, Widgets (done); XPMP2 still open
 
 - `xplm::utilities::directory_entries` (`XPLMGetDirectoryContents`) returns
   `DirectoryEntries`, a genuinely lazy, pull-based iterator — the `Iterator`
@@ -130,12 +130,38 @@ next.
   item's index).
 - README gained "Directory listing and data files" and "Key sniffers and hot
   keys" sections; both type-checked in `xplm/tests/readme_examples.rs`.
-- **Still split out**: Widgets (`SDK/CHeaders/Widgets` — `XPWidgets.h`,
-  `XPStandardWidgets.h`, `XPUIGraphics.h`; same RAII + trampoline treatment,
-  and the no-stale-index/no-raw-pointer invariant from `CLAUDE.md` applies to
-  any item-tree API in there), and XPMP2 multiplayer/legacy aircraft
-  (`LegacyAircraft.cs`, `Multiplayer.cs`). `SDK/CHeaders/Wrappers` (C++
-  convenience wrappers) remains reference-only, not ported.
+- `xplm::widget` (`SDK/CHeaders/Widgets` — `XPWidgets.h`/`XPWidgetDefs.h`):
+  `Widget` (RAII, `Drop` calls `XPDestroyWidget`), `WidgetRef` (`Copy`
+  handle, the `Window`/`WindowRef` split repeated), `create_widget` for the
+  SDK's built-in classes (`WidgetClass`) and `create_custom_widget` for a
+  `FnMut(WidgetMessage, WidgetRef, isize, isize) -> bool` closure driving
+  everything, panic-guarded through one shared trampoline. Unlike
+  `xplm::menu::MenuItem`, every widget call (`XPDestroyWidget`,
+  `XPSetWidgetProperty`, `XPPlaceWidgetWithin`, ...) addresses a widget by
+  its raw `XPWidgetID` pointer directly, which stays valid for its whole
+  lifetime — index-addressing only shows up in enumeration
+  (`XPGetNthChildWidget`/`XPCountChildWidgets`), which `WidgetRef::children`
+  re-derives on every call rather than caching, so the no-stale-index
+  invariant from `CLAUDE.md` is satisfied without needing menu's
+  `Rc<Token>` bookkeeping — the SDK-level hazard that pattern guards against
+  doesn't actually arise here. Standard widget classes' own per-class
+  property/message IDs (`XPStandardWidgets.h`) and `XPUIGraphics.h`'s
+  native-look-and-feel drawing helpers aren't wrapped yet;
+  `WidgetPropertyId::new`/`WidgetMessage::Other` reach them by raw ID in the
+  meantime. Gated behind a new opt-in `widgets` Cargo feature (`xplm-sys` →
+  `xplm`, off by default, mirroring `deprecated`) — it's still a flat C API
+  `bindgen` handles the same way as everything else, but links a second
+  native library (`XPWidgets_64`/delay-loaded the same as `XPLM_64`), so a
+  plugin that never touches it shouldn't have to link it. README gained a
+  "Widgets" section, type-checked (behind the feature) in
+  `xplm/tests/readme_examples.rs`.
+- **Still split out**: XPMP2 multiplayer/legacy aircraft
+  (`LegacyAircraft.cs`, `Multiplayer.cs`) — deferred until the pure-XPLM
+  surface (this crate's actual scope) is fully ported; XPMP2 is a separate
+  C++ library with its own build (not just headers) and a virtual-dispatch
+  class API rather than a flat C one, so it'll need materially different
+  tooling than a bindgen wrapper when it's picked up. `SDK/CHeaders/Wrappers`
+  (C++ convenience wrappers) remains reference-only, not ported.
 
 ## Phase 8 — Parity example
 

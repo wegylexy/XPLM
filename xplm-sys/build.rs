@@ -33,6 +33,8 @@ fn main() {
         .filter(|v| env::var(format!("CARGO_FEATURE_{v}")).is_ok())
         .collect();
 
+    let widgets = env::var("CARGO_FEATURE_WIDGETS").is_ok();
+
     let mut builder = bindgen::Builder::default()
         .header(headers_dir.join("XPLM/XPLMDefs.h").to_str().unwrap())
         .header(headers_dir.join("XPLM/XPLMUtilities.h").to_str().unwrap())
@@ -62,6 +64,24 @@ fn main() {
         ))
         .layout_tests(false)
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()));
+
+    if widgets {
+        builder = builder
+            .header(headers_dir.join("Widgets/XPWidgetDefs.h").to_str().unwrap())
+            .header(headers_dir.join("Widgets/XPWidgets.h").to_str().unwrap())
+            .header(
+                headers_dir
+                    .join("Widgets/XPStandardWidgets.h")
+                    .to_str()
+                    .unwrap(),
+            )
+            .header(headers_dir.join("Widgets/XPUIGraphics.h").to_str().unwrap())
+            .clang_arg(format!("-I{}", headers_dir.join("Widgets").display()))
+            .allowlist_file(format!(
+                "{}.*",
+                regex_escape(&headers_dir.join("Widgets").display().to_string())
+            ));
+    }
 
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
     builder = match target_os.as_str() {
@@ -102,6 +122,10 @@ fn main() {
         builder = builder.clang_arg("-DXPLM_DEPRECATED");
     }
 
+    if widgets {
+        println!("cargo:rustc-cfg=feature=\"widgets\"");
+    }
+
     let bindings = builder
         .generate()
         .expect("unable to generate xplm-sys bindings");
@@ -125,6 +149,10 @@ fn main() {
         // that doesn't actually call into the sim) without it on PATH — it's
         // only resolved lazily, on first real call into an XPLM_* function.
         println!("cargo:rustc-link-arg=/DELAYLOAD:XPLM_64.dll");
+        if widgets {
+            println!("cargo:rustc-link-lib=dylib=XPWidgets_64");
+            println!("cargo:rustc-link-arg=/DELAYLOAD:XPWidgets_64.dll");
+        }
         println!("cargo:rustc-link-lib=dylib=delayimp");
     }
     // TODO Linux/macOS link flags (bundle-relative rpath, framework search paths) — Phase 1 follow-up.

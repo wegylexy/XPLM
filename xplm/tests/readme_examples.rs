@@ -15,6 +15,8 @@ use xplm::menu::Menu;
 use xplm::processing::{FlightLoop, FlightLoopPhase};
 use xplm::scenery::{DrawInfo, Object, ProbeOutcome, TerrainProbe};
 use xplm::utilities::{directory_entries, load_data_file, save_data_file, DataFileType};
+#[cfg(feature = "widgets")]
+use xplm::widget::{create_widget, DispatchMode, Widget, WidgetClass, WidgetMessage};
 use xplm::window::{register_hot_key, register_key_sniffer, HotKey, KeyFlags, KeySniffer};
 
 // README "Menus, including nested submenus" snippet.
@@ -198,4 +200,31 @@ fn _readme_key_sniffer_and_hot_key() -> (KeySniffer, Option<HotKey>) {
     });
 
     (sniffer, hot_key)
+}
+
+// README "Widgets" snippet.
+#[cfg(feature = "widgets")]
+fn _readme_widget(root: Widget) -> Widget {
+    let button = create_widget(
+        10,
+        90,
+        110,
+        70,
+        true,
+        "Click me",
+        false,
+        Some(root.handle()),
+        WidgetClass::Button,
+    )
+    .expect("failed to create button widget");
+
+    let handled = button.handle().send_message(
+        WidgetMessage::Other(1300), // xpMsg_PushButtonPressed
+        DispatchMode::Direct,
+        0,
+        0,
+    );
+    let _ = handled;
+
+    button
 }

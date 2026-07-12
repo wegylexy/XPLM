@@ -373,6 +373,47 @@ Dropping `sniffer`/`hot_key` unregisters them. `xplm::window::hot_key_count`/
 cache the index across calls, since another plugin (un)registering one shifts
 the positions after it, the same reindexing hazard as `xplm::menu`.
 
+### Widgets
+
+The widgets UI toolkit (`SDK/CHeaders/Widgets`) is behind the opt-in
+`widgets` Cargo feature — it links a second native library
+(`XPWidgets_64`), so plugins that don't use it don't pay for that:
+
+```toml
+xplm = { version = "...", features = ["widgets"] }
+```
+
+```rust
+use xplm::widget::{create_widget, DispatchMode, WidgetClass, WidgetMessage};
+
+let button = create_widget(
+    10, 90, 110, 70, // left, top, right, bottom
+    true,
+    "Click me",
+    false, // not a root widget — it's placed inside another one
+    Some(root.handle()),
+    WidgetClass::Button,
+).expect("failed to create button widget");
+
+// Standard widget classes' own messages (here, xpMsg_PushButtonPressed)
+// aren't named constants yet — reach them via WidgetMessage::Other and
+// XPStandardWidgets.h until they are.
+let handled = button.handle().send_message(
+    WidgetMessage::Other(1300),
+    DispatchMode::Direct,
+    0, 0,
+);
+```
+
+Every widget API addresses a widget by its raw `XPWidgetID` directly (not an
+index), so — unlike `xplm::menu::MenuItem` — a `Widget`/`WidgetRef` handle
+never goes stale on its own; only `WidgetRef::children`'s *enumeration
+order* shifts if the tree is mutated mid-iteration, the same caveat as any
+collection. Dropping a `Widget` destroys it (and its descendants) natively.
+For entirely custom behavior instead of a built-in class, use
+`create_custom_widget`, which takes a `FnMut(WidgetMessage, WidgetRef, isize,
+isize) -> bool` closure in place of a `WidgetClass`.
+
 ## Running tests (Windows)
 
 `xplm-sys` delay-loads `XPLM_64.dll` (it only exists inside a running X-Plane

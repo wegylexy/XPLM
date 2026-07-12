@@ -32,6 +32,16 @@ lower versions when a higher one is defined — enabling `XPLM420` must pass eve
 checking it's actually present as an `#if defined(XPLM...)` guard in `SDK/CHeaders`
 first (`grep -rohE "XPLM[0-9]{3}" SDK/CHeaders/*/*.h | sort -u`).
 
+## Optional native libraries
+
+`widgets` (`xplm-sys` → `xplm`, off by default, same shape as `deprecated`)
+bindgens and links `SDK/CHeaders/Widgets` + `XPWidgets_64` — a second native
+DLL alongside `XPLM_64`. It's still a flat C API `bindgen` handles the same
+way as the rest of the SDK; it's feature-gated purely so a plugin that never
+touches the widgets toolkit doesn't link a DLL it never calls into. Don't
+assume `xplm::widget` is compiled in when checking a build — build/test with
+`--features widgets` explicitly, same as any `XPLM2xx`-`XPLM4xx` combination.
+
 ## Panic safety
 
 Every `extern "C"` trampoline that X-Plane calls back into MUST go through

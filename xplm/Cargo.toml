@@ -26,4 +26,8 @@ XPLM420 = ["XPLM410", "xplm-sys/XPLM420"]
 # it in this crate is marked #[deprecated] rather than hidden outright.
 deprecated = ["xplm-sys/deprecated"]
 
+# See xplm-sys/Cargo.toml: opt-in, off by default so a plugin that never
+# touches the widgets UI toolkit doesn't link XPWidgets_64.
+widgets = ["xplm-sys/widgets"]
+
 default = ["XPLM420"]

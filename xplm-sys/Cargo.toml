@@ -35,4 +35,10 @@ XPLM420 = ["XPLM410"]
 # silent trap.
 deprecated = []
 
+# Opt-in: bindgens and links XPWidgets_64 (Widgets/XPWidgets.h et al.) — a
+# second native library alongside XPLM_64. Off by default so a plugin that
+# never touches the widgets UI toolkit doesn't link a DLL it never calls
+# into.
+widgets = []
+
 default = ["XPLM420"]
