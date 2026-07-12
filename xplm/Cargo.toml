@@ -8,6 +8,9 @@ license.workspace = true
 xplm-sys = { path = "../xplm-sys", default-features = false }
 xplm-macros = { path = "../xplm-macros" }
 
+[dev-dependencies]
+trybuild = "1"
+
 [features]
 XPLM200 = ["xplm-sys/XPLM200"]
 XPLM210 = ["XPLM200", "xplm-sys/XPLM210"]

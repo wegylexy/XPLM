@@ -2,6 +2,7 @@
 //!
 //! Phase 2+ modules (dataref, plugin lifecycle, menus, ...) land here.
 
+pub mod dataref;
 pub mod processing;
 
 #[cfg(not(test))]

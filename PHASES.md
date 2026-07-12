@@ -17,17 +17,28 @@ testable before moving to the next.
 - Testable: unit tests for the registry (insert/remove/panic-recovery) under
   plain `cargo test`; an example `cdylib` plugin to manually verify in-sim.
 
-## Phase 3 — DataRef subsystem
+## Phase 3 — DataRef subsystem (done)
 
-- Port `DataAccess.cs` (largest surface, 558 lines in the C# original) to
-  `DataRef<T, Access>` with `ReadOnly`/`ReadWrite` phantom marker traits.
-  `get()` on both, `set()` only when `Access = ReadWrite` — compile-time
-  mutability gating instead of runtime checks.
-- Array-dataref variants (`XPLMGetDatavi`/`XPLMGetDatavf`/etc.) as their own
-  typed wrappers.
-- Testable: `trybuild` compile-fail tests asserting `set()` doesn't exist on
-  `DataRef<T, ReadOnly>`; runtime tests against known sim datarefs where a
-  harness is available.
+- Ported the scalar half of `DataAccess.cs` to `xplm::dataref::DataRef<T, Access>`
+  (`T` sealed to `i32`/`f32`/`f64`), with `ReadOnly<T>`/`ReadWrite<T>` type
+  aliases over sealed `ReadOnlyMarker`/`ReadWriteMarker` phantom types.
+  `get()` is defined for both; `set()` only exists under a `Writable` bound
+  that only `ReadWriteMarker` implements — a compile error, not a runtime
+  writability check.
+- `ArrayDataRef<T, Access>` (`T` sealed to `i32`/`f32`) covers
+  `XPLMGetDatavi`/`XPLMSetDatavi`/`XPLMGetDatavf`/`XPLMSetDatavf`, with
+  `len()`/`get(offset, &mut [T])`/`set(offset, &[T])` (`set` gated the same
+  way). Byte-array (`xplmType_Data`) datarefs are out of scope for now.
+- `XPLMRegisterDataAccessor` (publishing your own dataref) is deferred — it's
+  a distinct RAII+trampoline object (closer to `FlightLoop`'s shape than to
+  `find()`), not part of the "read an existing dataref" surface this phase
+  covers.
+- Tested: `trybuild` compile-fail tests (`xplm/tests/compile_fail.rs`) confirm
+  `set()` doesn't exist on `ReadOnly<f32>`/`ReadOnlyArray<f32>`. Runtime
+  correctness against real sim datarefs is unverified outside a hosted
+  X-Plane process (same limitation as Phase 2 — `XPLMFindDataRef`/`XPLMGetData*`
+  assume the sim engine is actually running, not just that the DLL is
+  loaded) and is deferred to the Phase 4/5 example plugin's in-sim `/verify`.
 
 ## Phase 4 — Plugin lifecycle + trampolines
 

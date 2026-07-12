@@ -1,0 +1,13 @@
+error[E0599]: the method `set` exists for struct `ArrayDataRef<f32, ReadOnlyMarker>`, but its trait bounds were not satisfied
+ --> tests/ui/set_on_readonly_array.rs:6:12
+  |
+6 |         dr.set(0, &[1.0]);
+  |            ^^^
+  |
+ ::: src/dataref.rs
+  |
+  | pub struct ReadOnlyMarker;
+  | ------------------------- doesn't satisfy `ReadOnlyMarker: Writable`
+  |
+  = note: the following trait bounds were not satisfied:
+          `ReadOnlyMarker: Writable`
