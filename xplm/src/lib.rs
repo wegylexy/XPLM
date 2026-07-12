@@ -2,7 +2,9 @@
 //!
 //! Phase 2+ modules (dataref, plugin lifecycle, menus, ...) land here.
 
+pub mod camera;
 pub mod dataref;
+pub mod menu;
 pub mod plugin;
 pub mod processing;
 

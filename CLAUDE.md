@@ -38,6 +38,24 @@ Every `extern "C"` trampoline that X-Plane calls back into MUST go through
 `xplm::guard()` (`catch_unwind`). A panic unwinding into the native host is UB —
 treat a missing guard on a new trampoline as a correctness bug, not a style nit.
 
+## No stale indices, no public raw pointers/indices
+
+Any wrapper over an SDK API where items live in an X-Plane-managed, index-addressed
+list (menu items today; anything with similar remove-and-reindex semantics in later
+phases — e.g. Widgets' item trees) MUST NOT cache a numeric index or expose a raw
+pointer/index as a `pub` field on the per-item handle. Caching goes stale silently
+the moment an earlier sibling is removed and X-Plane reindexes everything below it.
+
+The pattern used in `xplm::menu` (`Menu`/`MenuItem`) is the template: the parent
+holds the authoritative ordered list (`Vec<Option<Rc<ItemToken>>>`, `None` for
+slots that don't carry a Rust-side handle but still consume an index, e.g.
+separators), each child handle holds an `Rc<Token>` identity marker (not an index,
+not a raw pointer), and the current index is computed by identity lookup
+(`Rc::ptr_eq`) on every access — mirroring the C# original's `Items.IndexOf(this)`
+rather than a cached field. Apply this same shape to Instance/Widgets/Scenery
+wrappers in later phases, not just Menu; this was raised as a real bug (not a style
+nit) once already and shouldn't need raising twice.
+
 ## Running tests
 
 `XPLM_64.dll` only exists inside a running X-Plane process; `xplm-sys` delay-loads

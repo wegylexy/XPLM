@@ -62,14 +62,57 @@ testable before moving to the next.
   outstanding — flagged for whenever there's a live X-Plane session to test
   against, same as the runtime DataRef checks deferred from Phase 3.
 
-## Phase 5 — Menu, Processing, Instance, Camera, Display/Graphics
+## Phase 5 — Menu, Camera (done); Instance/Display/Graphics rescoped
 
-- One module per C# file (`Menu.cs`, `Processing.cs`, `Instance.cs`,
-  `Camera.cs`, `Display.cs`, `Graphics.cs`), following the RAII + trampoline
-  pattern established in Phases 2/4. Each gets its own `Drop`-based unregister
-  and its own closure registry.
-- Testable: extend the example plugin incrementally — add a menu item, a
-  flight loop callback, a camera hook — verify each in-sim.
+- `xplm::menu::Menu` (`XPLMMenus.h`): same boxed-closure-behind-a-refcon
+  trampoline shape as `FlightLoop`, plus an internal item list mirroring the
+  C# original's `List<Item>`. `Menu::add_item` returns a `MenuItem` handle
+  (matching the C# original's `Item`-returning `AppendItem`) with
+  `set_checked`/`checked`/`set_enabled`/`set_name`/`remove` on it — but
+  crucially `MenuItem` does **not** cache its own index or expose the raw
+  item pointer. Each item is an `Rc<ItemToken>` identity marker; the `Menu`'s
+  internal `Vec<Option<Rc<ItemToken>>>` (one slot per XPLM index, `None` for
+  separators so positions stay aligned) is the source of truth, and
+  `MenuItem::index()` finds its current position by identity (`Rc::ptr_eq`)
+  each time it's called — the same reasoning as the C# original's
+  `Items.IndexOf(this)`, so it's automatically correct after an earlier item
+  is removed and X-Plane reindexes everything below it, rather than going
+  stale. The item's XPLM refcon is that same identity pointer; the
+  trampoline finds the clicked item's current index the same way.
+  `Menu::new_in_plugins_menu` handles the two-step `XPLMAppendMenuItem` +
+  `XPLMCreateMenu` dance needed to anchor a plugin's top-level menu under
+  X-Plane's Plugins menu.
+- `xplm::camera::CameraControl` (`XPLMCamera.h`): same shape again. Notably
+  the SDK has exactly one global camera-control slot with no handle
+  returned by `XPLMControlCamera` — documented as a caveat on `Drop` (a
+  second `CameraControl` silently orphans a first still-alive one; dropping
+  the first afterward releases control the second thinks it holds). This is
+  inherent to the SDK's shape, not something the wrapper can fix.
+- **Rescoped**: `Instance` (`XPLMInstance.h`) depends on `XPLMDrawInfo_t` and
+  `XPLMObjectRef` from `XPLMScenery.h` — pulling it in here would mean
+  half-implementing Scenery anyway, so it moves to Phase 7 alongside
+  Scenery instead of being split across two phases artificially.
+- **Rescoped**: `Display`/`Graphics` (`XPLMDisplay.h` is 2100+ lines, with
+  ~8 window callbacks — draw/click/key/cursor/wheel/right-click/etc.) is too
+  large a surface for this pass without rushing a shallow implementation.
+  Split out as **Phase 5b** (windows + drawing) to be scoped and tackled on
+  its own.
+- Tested: extended `examples/hello-plugin` with a `Menu` item alongside the
+  existing `FlightLoop` heartbeat; confirmed the five required plugin
+  exports are still present in the built DLL. `CameraControl` isn't
+  exercised in the example (nothing to sensibly demo without a live camera
+  to observe) — covered by its unit-level type conversions only.
+
+## Phase 5b — Display/Graphics (windows + drawing)
+
+- Scope out from Phase 5 above. `XPLMCreateWindowEx` and its ~8 callbacks
+  (draw, mouse click, key, cursor, mouse wheel, right-click if present) each
+  need their own boxed-closure-behind-a-refcon trampoline, likely grouped
+  behind a single `Window` builder rather than one closure per callback to
+  keep the call site from becoming an 8-closure constructor.
+- `XPLMGraphics.h` (drawing primitives, coordinate conversion) is mostly
+  stateless free functions — much lower effort than the window surface;
+  can land alongside or slightly ahead of it.
 
 ## Phase 6 — `xplm-macros`
 
@@ -83,7 +126,9 @@ testable before moving to the next.
 
 ## Phase 7 — Remaining surfaces
 
-- Planes, Scenery, Utilities (`Planes.cs`, `Scenery.cs`, `Utilities.cs`).
+- Planes, Scenery, Utilities (`Planes.cs`, `Scenery.cs`, `Utilities.cs`), plus
+  Instance (`Instance.cs`/`XPLMInstance.h`), moved here from Phase 5 since it
+  depends on `XPLMDrawInfo_t`/`XPLMObjectRef` from Scenery.
 - Widgets, off `SDK/CHeaders/Widgets` (`XPWidgets.h`, `XPStandardWidgets.h`,
   `XPUIGraphics.h`) — same RAII + trampoline treatment as everything else.
   `SDK/CHeaders/Wrappers` (the C++ convenience wrappers) is reference-only and

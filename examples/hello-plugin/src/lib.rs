@@ -1,17 +1,19 @@
-//! Minimal example plugin proving Phases 2-4 end to end: plugin lifecycle
+//! Minimal example plugin proving Phases 2-5 end to end: plugin lifecycle
 //! (this crate's `XPlanePlugin` impl + `register_plugin!`), the panic-guarded
-//! trampoline pattern, and a `FlightLoop` RAII wrapper.
+//! trampoline pattern, a `FlightLoop` RAII wrapper, and a `Menu`.
 //!
 //! Build with `cargo build -p hello-plugin`, then load the resulting DLL as
 //! an `.xpl` in a running X-Plane to verify manually (see PHASES.md Phase 4).
 
+use xplm::menu::{Menu, MenuCheckState};
 use xplm::plugin::XPlanePlugin;
 use xplm::processing::{FlightLoop, FlightLoopPhase};
 
 struct HelloPlugin {
-    // Held only to keep the flight loop registered for the plugin's
-    // lifetime; dropping it (in `stop`) unregisters the callback.
+    // Held only to keep the flight loop/menu registered for the plugin's
+    // lifetime; dropping them (in `stop`) unregisters the native objects.
     _heartbeat: FlightLoop,
+    _menu: Menu,
 }
 
 impl XPlanePlugin for HelloPlugin {
@@ -27,8 +29,20 @@ impl XPlanePlugin for HelloPlugin {
         });
         // XPLMCreateFlightLoop registers the callback unscheduled; opt in.
         heartbeat.schedule(-1.0, true);
+
+        let menu = Menu::new_in_plugins_menu("Hello Plugin", |item_index| {
+            xplm::log(&format!("hello-plugin: menu item {item_index} clicked\n"));
+        })
+        .expect("failed to create hello-plugin menu");
+        // add_item returns a MenuItem handle with getters/setters directly
+        // on it — no need to thread the index back through Menu yourself.
+        if let Some(item) = menu.add_item("Say hello") {
+            item.set_checked(MenuCheckState::Unchecked);
+        }
+
         Self {
             _heartbeat: heartbeat,
+            _menu: menu,
         }
     }
 
