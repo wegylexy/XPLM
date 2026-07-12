@@ -58,7 +58,7 @@ next.
   `examples/hello-plugin` converted to the attribute-macro flow; `trybuild`
   `.pass(...)` tests confirm both macros expand to code that compiles.
 
-## Phase 7 — Commands, Utilities, Scenery, Instance, Planes (done); rest split into 7b
+## Phase 7 — Commands, Utilities, Scenery, Instance, Planes (done)
 
 - `xplm::command::Command`/`CommandHandler` (`XPLMUtilities.h`'s command
   subsystem): `Command` is a thin, `Copy` handle — unlike everything else in
@@ -105,14 +105,37 @@ next.
   you don't. `XPLMInitFlight`/`XPLMUpdateFlight` (`XPLM430`-gated) are
   intentionally *not* wrapped — this crate caps version support at
   `XPLM420` — rather than merely deferred.
-- **Still split out as Phase 7b**: the rest of `XPLMUtilities.h` (directory
-  listing, data files, key sniffers, hotkeys), Widgets (`SDK/CHeaders/Widgets`
-  — `XPWidgets.h`, `XPStandardWidgets.h`, `XPUIGraphics.h`; same RAII +
-  trampoline treatment, and the no-stale-index/no-raw-pointer invariant from
-  `CLAUDE.md` applies to any item-tree API in there), and XPMP2
-  multiplayer/legacy aircraft (`LegacyAircraft.cs`, `Multiplayer.cs`).
-  `SDK/CHeaders/Wrappers` (C++ convenience wrappers) remains reference-only,
-  not ported.
+
+## Phase 7b — remaining Utilities (done); Widgets, XPMP2 still open
+
+- `xplm::utilities::directory_entries` (`XPLMGetDirectoryContents`) returns
+  `DirectoryEntries`, a genuinely lazy, pull-based iterator — the `Iterator`
+  analogue of C#'s `IEnumerable<string>` — rather than eagerly filling (or
+  growing) one big buffer. It uses the SDK's own `inFirstReturn` paging
+  support internally: each `Iterator::next()` call only reaches into native
+  code once its current small page (1 KiB) of names is exhausted, so memory
+  use stays bounded by the page size no matter how large the directory is,
+  and nothing is fetched until the caller actually asks for the next name.
+  `load_data_file`/`save_data_file` + `DataFileType` (`XPLM200`+).
+- `xplm::window` gained key sniffers and hot keys — both declared in
+  `XPLMDisplay.h`, not `XPLMUtilities.h`, hence living here rather than in
+  `xplm::utilities`. `register_key_sniffer`/`KeySniffer` (RAII + trampoline,
+  unregister keyed on the same `(fn ptr, before_windows, refcon)` triple the
+  SDK requires to match). `register_hot_key`/`HotKey` (RAII, one boxed
+  `FnMut` per hot key, own-hot-keys-only unregister on `Drop`).
+  `HotKeyId`/`hot_key_count`/`nth_hot_key` expose the SDK's index-addressed
+  enumeration of *every* plugin's hot keys — the no-stale-index invariant
+  from `CLAUDE.md` applies to the enumeration position (never cached), but
+  not to `XPLMHotKeyID` itself (a genuine stable opaque handle, unlike a menu
+  item's index).
+- README gained "Directory listing and data files" and "Key sniffers and hot
+  keys" sections; both type-checked in `xplm/tests/readme_examples.rs`.
+- **Still split out**: Widgets (`SDK/CHeaders/Widgets` — `XPWidgets.h`,
+  `XPStandardWidgets.h`, `XPUIGraphics.h`; same RAII + trampoline treatment,
+  and the no-stale-index/no-raw-pointer invariant from `CLAUDE.md` applies to
+  any item-tree API in there), and XPMP2 multiplayer/legacy aircraft
+  (`LegacyAircraft.cs`, `Multiplayer.cs`). `SDK/CHeaders/Wrappers` (C++
+  convenience wrappers) remains reference-only, not ported.
 
 ## Phase 8 — Parity example
 

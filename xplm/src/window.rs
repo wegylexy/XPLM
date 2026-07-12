@@ -13,17 +13,18 @@
 //! a-refcon trampoline set, same shape as `FlightLoop`.
 
 use std::cell::RefCell;
-use std::ffi::c_void;
-#[cfg(feature = "XPLM300")]
-use std::ffi::CString;
+use std::ffi::{c_void, CString};
 use std::os::raw::{c_char, c_int};
 
 use xplm_sys::{
     xplm_CursorArrow, xplm_CursorCustom, xplm_CursorDefault, xplm_CursorHidden, xplm_MouseDown,
-    xplm_MouseUp, XPLMBringWindowToFront, XPLMCreateWindowEx, XPLMCreateWindow_t, XPLMCursorStatus,
-    XPLMDestroyWindow, XPLMGetWindowGeometry, XPLMGetWindowIsVisible, XPLMHasKeyboardFocus,
-    XPLMIsWindowInFront, XPLMKeyFlags, XPLMMouseStatus, XPLMSetWindowGeometry,
-    XPLMSetWindowIsVisible, XPLMTakeKeyboardFocus, XPLMWindowID,
+    xplm_MouseUp, XPLMBringWindowToFront, XPLMCountHotKeys, XPLMCreateWindowEx, XPLMCreateWindow_t,
+    XPLMCursorStatus, XPLMDestroyWindow, XPLMGetHotKeyInfo, XPLMGetNthHotKey,
+    XPLMGetWindowGeometry, XPLMGetWindowIsVisible, XPLMHasKeyboardFocus, XPLMHotKeyID,
+    XPLMIsWindowInFront, XPLMKeyFlags, XPLMMouseStatus, XPLMPluginID, XPLMRegisterHotKey,
+    XPLMRegisterKeySniffer, XPLMSetHotKeyCombination, XPLMSetWindowGeometry,
+    XPLMSetWindowIsVisible, XPLMTakeKeyboardFocus, XPLMUnregisterHotKey, XPLMUnregisterKeySniffer,
+    XPLMWindowID,
 };
 
 #[cfg(feature = "XPLM300")]
@@ -74,7 +75,7 @@ impl From<CursorStatus> for XPLMCursorStatus {
 
 /// `XPLMKeyFlags`' bits (`XPLMDefs.h`): which modifiers were held, and
 /// whether this is a key-down or key-up event.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct KeyFlags(XPLMKeyFlags);
 
 impl KeyFlags {
@@ -477,4 +478,205 @@ unsafe extern "C" fn mouse_wheel_trampoline(
         (state.mouse_wheel.borrow_mut())(WindowRef(window_id), x, y, wheel, clicks)
     })
     .unwrap_or(false) as c_int
+}
+
+type KeySnifferFn = dyn FnMut(char, KeyFlags, char) -> bool + 'static;
+
+/// A registered key sniffer (`XPLMRegisterKeySniffer`). Sees every keystroke
+/// while alive, before or after the window system depending on how it was
+/// registered; return `true` from the callback to let the key continue
+/// downstream, `false` to consume it. Dropping this unregisters it.
+pub struct KeySniffer {
+    before_windows: bool,
+    state: *mut RefCell<Box<KeySnifferFn>>,
+}
+
+unsafe impl Send for KeySniffer {} // see FlightLoop's identical rationale: main-thread-only callbacks.
+
+/// Registers `callback` to see every keystroke. `before_windows` matches the
+/// SDK's `inBeforeWindows`: sniff before the window system gets the key, or
+/// after. Returns `None` if the SDK refuses the registration.
+pub fn register_key_sniffer(
+    before_windows: bool,
+    callback: impl FnMut(char, KeyFlags, char) -> bool + 'static,
+) -> Option<KeySniffer> {
+    let state = Box::into_raw(Box::new(RefCell::new(
+        Box::new(callback) as Box<KeySnifferFn>
+    )));
+    let ok = unsafe {
+        XPLMRegisterKeySniffer(
+            Some(key_sniffer_trampoline),
+            before_windows as c_int,
+            state as *mut c_void,
+        )
+    };
+    if ok == 0 {
+        unsafe { drop(Box::from_raw(state)) };
+        return None;
+    }
+    Some(KeySniffer {
+        before_windows,
+        state,
+    })
+}
+
+impl Drop for KeySniffer {
+    fn drop(&mut self) {
+        unsafe {
+            XPLMUnregisterKeySniffer(
+                Some(key_sniffer_trampoline),
+                self.before_windows as c_int,
+                self.state as *mut c_void,
+            );
+            drop(Box::from_raw(self.state));
+        }
+    }
+}
+
+unsafe extern "C" fn key_sniffer_trampoline(
+    in_char: c_char,
+    in_flags: XPLMKeyFlags,
+    in_virtual_key: c_char,
+    refcon: *mut c_void,
+) -> c_int {
+    crate::guard(|| {
+        let state: &RefCell<Box<KeySnifferFn>> =
+            unsafe { &*(refcon as *const RefCell<Box<KeySnifferFn>>) };
+        (state.borrow_mut())(
+            in_char as u8 as char,
+            KeyFlags(in_flags),
+            in_virtual_key as u8 as char,
+        )
+    })
+    .unwrap_or(true) as c_int
+}
+
+/// A hot key your plugin registered (`XPLMRegisterHotKey`). Dropping this
+/// unregisters it — the SDK only lets a plugin unregister its own hot keys,
+/// unlike [`HotKeyId::set_combination`], which can remap any plugin's.
+pub struct HotKey {
+    id: XPLMHotKeyID,
+    state: *mut RefCell<Box<dyn FnMut() + 'static>>,
+}
+
+unsafe impl Send for HotKey {} // see FlightLoop's identical rationale: main-thread-only callbacks.
+
+impl HotKey {
+    /// A stable, `Copy`able reference to this hot key, usable with the same
+    /// query/mutate API every other plugin's hot keys are exposed through
+    /// ([`hot_key_count`]/[`nth_hot_key`]).
+    pub fn id(&self) -> HotKeyId {
+        HotKeyId(self.id)
+    }
+}
+
+/// Registers a hot key: `virtual_key`/`flags` is the key combination (see
+/// `XPLMDefs.h`'s `XPLM_VK_*` constants for `virtual_key`), `description`
+/// shows up in X-Plane's key-binding UI. Returns `None` if `description`
+/// contains an interior NUL.
+pub fn register_hot_key(
+    virtual_key: char,
+    flags: KeyFlags,
+    description: &str,
+    callback: impl FnMut() + 'static,
+) -> Option<HotKey> {
+    let c_description = CString::new(description).ok()?;
+    let state = Box::into_raw(Box::new(RefCell::new(
+        Box::new(callback) as Box<dyn FnMut() + 'static>
+    )));
+    let id = unsafe {
+        XPLMRegisterHotKey(
+            virtual_key as u8 as c_char,
+            flags.0,
+            c_description.as_ptr(),
+            Some(hot_key_trampoline),
+            state as *mut c_void,
+        )
+    };
+    if id.is_null() {
+        unsafe { drop(Box::from_raw(state)) };
+        return None;
+    }
+    Some(HotKey { id, state })
+}
+
+impl Drop for HotKey {
+    fn drop(&mut self) {
+        unsafe {
+            XPLMUnregisterHotKey(self.id);
+            drop(Box::from_raw(self.state));
+        }
+    }
+}
+
+unsafe extern "C" fn hot_key_trampoline(refcon: *mut c_void) {
+    crate::guard(|| {
+        let state: &RefCell<Box<dyn FnMut() + 'static>> =
+            unsafe { &*(refcon as *const RefCell<Box<dyn FnMut() + 'static>>) };
+        (state.borrow_mut())();
+    });
+}
+
+/// A stable handle to a registered hot key (`XPLMHotKeyID`) — possibly one
+/// registered by another plugin. Unlike [`crate::menu::MenuItem`], this
+/// isn't an index into a reindexed list, so it's safe to hold onto; only
+/// [`hot_key_count`]/[`nth_hot_key`]'s *enumeration order* shifts as hot keys
+/// are (un)registered, which is why this crate doesn't cache a position for
+/// one either.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HotKeyId(XPLMHotKeyID);
+
+pub struct HotKeyInfo {
+    pub virtual_key: char,
+    pub flags: KeyFlags,
+    pub description: String,
+    pub plugin: XPLMPluginID,
+}
+
+impl HotKeyId {
+    pub fn info(&self) -> HotKeyInfo {
+        let (mut virtual_key, mut flags, mut plugin): (c_char, XPLMKeyFlags, XPLMPluginID) =
+            (0, 0, 0);
+        let mut description = [0u8; 512];
+        unsafe {
+            XPLMGetHotKeyInfo(
+                self.0,
+                &mut virtual_key,
+                &mut flags,
+                description.as_mut_ptr() as *mut c_char,
+                &mut plugin,
+            );
+        }
+        let end = description
+            .iter()
+            .position(|&b| b == 0)
+            .unwrap_or(description.len());
+        HotKeyInfo {
+            virtual_key: virtual_key as u8 as char,
+            flags: KeyFlags(flags),
+            description: String::from_utf8_lossy(&description[..end]).into_owned(),
+            plugin,
+        }
+    }
+
+    /// Remaps this hot key's combination — the SDK allows this for *any*
+    /// plugin's hot key, not just your own, so a caller can offer a
+    /// key-rebinding UI.
+    pub fn set_combination(&self, virtual_key: char, flags: KeyFlags) {
+        unsafe { XPLMSetHotKeyCombination(self.0, virtual_key as u8 as c_char, flags.0) }
+    }
+}
+
+/// The number of hot keys currently registered, across every plugin.
+pub fn hot_key_count() -> i32 {
+    unsafe { XPLMCountHotKeys() }
+}
+
+/// The hot key at `index` (`0..hot_key_count()`) in the current enumeration
+/// order — re-derive this on every call rather than caching it, since
+/// (un)registering any hot key (by any plugin) shifts the positions after
+/// it.
+pub fn nth_hot_key(index: i32) -> Option<HotKeyId> {
+    let id = unsafe { XPLMGetNthHotKey(index) };
+    (!id.is_null()).then_some(HotKeyId(id))
 }

@@ -14,6 +14,8 @@ use xplm::instance::Instance;
 use xplm::menu::Menu;
 use xplm::processing::{FlightLoop, FlightLoopPhase};
 use xplm::scenery::{DrawInfo, Object, ProbeOutcome, TerrainProbe};
+use xplm::utilities::{directory_entries, load_data_file, save_data_file, DataFileType};
+use xplm::window::{register_hot_key, register_key_sniffer, HotKey, KeyFlags, KeySniffer};
 
 // README "Menus, including nested submenus" snippet.
 fn _readme_nested_menu(menu: &Menu) {
@@ -73,6 +75,22 @@ fn _readme_command() -> (Command, CommandHandler) {
     cmd.once();
 
     (cmd, handler)
+}
+
+// README "Directory listing and data files" snippet.
+fn _readme_directory_and_data_files() {
+    directory_entries("Resources/plugins/MyPlugin/")
+        .expect("path had an interior NUL")
+        .for_each(|name| xplm::log(&format!("found: {name}\n")));
+
+    save_data_file(
+        DataFileType::Situation,
+        "Output/situations/my_plugin_autosave.sit",
+    );
+    load_data_file(
+        DataFileType::Situation,
+        Some("Output/situations/my_plugin_autosave.sit"),
+    );
 }
 
 // README "Terrain probing and instanced object drawing" snippet.
@@ -168,4 +186,16 @@ fn _readme_aircraft_access() -> Option<AircraftAccess> {
         }
         None => None,
     }
+}
+
+// README "Key sniffers and hot keys" snippet.
+fn _readme_key_sniffer_and_hot_key() -> (KeySniffer, Option<HotKey>) {
+    let sniffer = register_key_sniffer(true, |_key, _flags, _virtual_key| true)
+        .expect("failed to register key sniffer");
+
+    let hot_key = register_hot_key('k', KeyFlags::default(), "Do the thing", || {
+        xplm::log("hot key pressed\n")
+    });
+
+    (sniffer, hot_key)
 }

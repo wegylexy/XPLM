@@ -210,6 +210,22 @@ let handler = cmd.register_handler(true, |phase| {
 cmd.once(); // or begin()/end() for a held-down command
 ```
 
+### Directory listing and data files
+
+```rust
+use xplm::utilities::{directory_entries, load_data_file, save_data_file, DataFileType};
+
+// Lazy, pull-based enumeration (like C#'s `IEnumerable<string>`) — entries
+// are fetched a small page at a time as you iterate, not staged into one
+// big buffer upfront.
+directory_entries("Resources/plugins/MyPlugin/")
+    .expect("path had an interior NUL")
+    .for_each(|name| xplm::log(&format!("found: {name}\n")));
+
+save_data_file(DataFileType::Situation, "Output/situations/my_plugin_autosave.sit");
+load_data_file(DataFileType::Situation, Some("Output/situations/my_plugin_autosave.sit"));
+```
+
 ### Terrain probing and instanced object drawing
 
 `TerrainProbe` finds the physical scenery mesh under a point; `Object`/`Instance`
@@ -330,6 +346,32 @@ match access {
 `xplm::aircraft` also has free functions for the user's own aircraft —
 `set_users_aircraft`, `place_user_at_airport`/`place_user_at_location`,
 `aircraft_count`, `nth_aircraft_model` — none of which need `AircraftAccess`.
+
+### Key sniffers and hot keys
+
+Both live in `XPLMDisplay.h` (not `XPLMUtilities.h`), so they're in
+`xplm::window` alongside `Window`. A key sniffer sees every keystroke while
+it's registered; a hot key fires once per press of a specific combination:
+
+```rust
+use xplm::window::{register_hot_key, register_key_sniffer, KeyFlags};
+
+let sniffer = register_key_sniffer(true, |_key, _flags, _virtual_key| {
+    true // let the key continue on to the window system
+});
+
+let hot_key = register_hot_key(
+    'k',
+    KeyFlags::default(), // no modifiers
+    "Do the thing",
+    || xplm::log("hot key pressed\n"),
+);
+```
+
+Dropping `sniffer`/`hot_key` unregisters them. `xplm::window::hot_key_count`/
+`nth_hot_key` enumerate *every* plugin's hot keys (not just your own) — don't
+cache the index across calls, since another plugin (un)registering one shifts
+the positions after it, the same reindexing hazard as `xplm::menu`.
 
 ## Running tests (Windows)
 
