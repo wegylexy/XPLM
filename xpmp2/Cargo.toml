@@ -8,6 +8,14 @@ license.workspace = true
 xpmp2-sys = { path = "../xpmp2-sys" }
 xplm = { path = "../xplm", default-features = false }
 
+# Only pulled in behind the `csl-on-demand` feature — see src/csl_on_demand.rs.
+# Published, maintained alongside the csl-on-demand server it talks to, so
+# this crate doesn't reimplement it.
+csl-client = { package = "flybywireless-csl-client", version = "0.1", optional = true }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"], optional = true }
+tokio = { version = "1", features = ["rt"], optional = true }
+anyhow = { version = "1", optional = true }
+
 [features]
 XPLM200 = ["xplm/XPLM200"]
 XPLM210 = ["XPLM200", "xplm/XPLM210"]
@@ -18,5 +26,30 @@ XPLM303 = ["XPLM302", "xplm/XPLM303"]
 XPLM400 = ["XPLM303", "xplm/XPLM400"]
 XPLM410 = ["XPLM400", "xplm/XPLM410"]
 XPLM420 = ["XPLM410", "xplm/XPLM420"]
+
+# Loading a locally-installed CSL package directory (`XPMPLoadCSLPackage`,
+# `Multiplayer::load_csl_package`) — no extra dependencies, but opt-in like
+# `csl-on-demand` below (neither is in `default`) rather than on by default:
+# the two are mutually exclusive (enforced by a `compile_error!` in
+# src/lib.rs, since Cargo features can't express exclusion on their own), and
+# having one on by default would mean any other workspace member depending
+# on `xpmp2` with the other feature explicitly enabled fails to build under
+# `cargo build --workspace` — Cargo unifies features across every selected
+# member, including `xpmp2` itself built with its own defaults, so a default
+# feature here would collide with a sibling crate's explicit opt-in the
+# moment both are workspace members (see `examples/xpmp2-template`, which
+# depends on `xpmp2` with `csl-on-demand`).
+csl-offline = []
+
+# On-demand CSL package fetching via the published `flybywireless-csl-client`
+# crate. Mutually exclusive with `csl-offline` (see src/lib.rs): on-demand
+# loading (fetch one model's package, load just that package, the instant
+# it's needed) is a different usage pattern from `csl-offline`'s bulk
+# local-library loading, not something meant to compose with it —
+# `csl_on_demand::CslCache::request` loads what it fetches itself, without
+# going through `Multiplayer::load_csl_package`. Needs `XPLM210` (cascaded
+# in) for the `xplm::processing::FlightLoop` that drains fetch completions
+# back onto the main thread — see src/csl_on_demand.rs.
+csl-on-demand = ["XPLM210", "dep:csl-client", "dep:reqwest", "dep:tokio", "dep:anyhow"]
 
 default = ["XPLM420"]

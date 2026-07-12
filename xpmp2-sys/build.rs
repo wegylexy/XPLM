@@ -126,10 +126,9 @@ fn main() {
     for source in SOURCES {
         build.file(xpmp2_src.join(source));
     }
-    // The hand-written C++ shim (see PHASES.md Phase 1's "C++ shim" note)
-    // exposing `XPMP2::Aircraft` as a flat `extern "C"` API — compiled into
-    // the same static lib as XPMP2 itself so there's only one native
-    // archive to link.
+    // The hand-written C++ shim (see shim/shim.h's doc comment) exposing
+    // `XPMP2::Aircraft` as a flat `extern "C"` API — compiled into the same
+    // static lib as XPMP2 itself so there's only one native archive to link.
     build.file(shim_dir.join("shim.cpp"));
     build.compile("xpmp2");
 
@@ -145,11 +144,10 @@ fn main() {
     // --- bindgen the flat-C surface only -----------------------------------
     //
     // Only `XPMPMultiplayer.h` (init/cleanup/sound/CSL-loading/contrail —
-    // see PHASES.md's "What XPMP2 actually exposes" note) is handed to
-    // bindgen here. `XPMPAircraft.h`'s `XPMP2::Aircraft` is a C++ class
-    // bindgen can't wrap directly — that needs the hand-written C++ shim
-    // described in PHASES.md's Phase 1, not yet written, exposed to this
-    // crate as its own small `extern "C"` header once it exists.
+    // plain `extern "C"` functions) is handed to bindgen here.
+    // `XPMPAircraft.h`'s `XPMP2::Aircraft` is a C++ class bindgen can't wrap
+    // directly — that's what the hand-written C++ shim (`shim/shim.h`) is
+    // for, bindgen-ed as its own small `extern "C"` header instead.
     let mut builder = bindgen::Builder::default()
         .header(xpmp2_inc.join("XPMPMultiplayer.h").to_str().unwrap())
         .header(shim_dir.join("shim.h").to_str().unwrap())

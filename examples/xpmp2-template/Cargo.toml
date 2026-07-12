@@ -1,0 +1,16 @@
+[package]
+name = "xpmp2-template"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+xplm = { path = "../../xplm" }
+# `csl-offline`/`csl-on-demand` are mutually exclusive and both opt-in (see
+# xpmp2/Cargo.toml) — this example wants on-demand fetching, not a bundled
+# local CSL library.
+xpmp2 = { path = "../../xpmp2", features = ["XPLM420", "csl-on-demand"] }

@@ -2,9 +2,9 @@
 //! (`inc/XPMPMultiplayer.h`) plus `shim/shim.h`, a hand-written C++ shim
 //! exposing `XPMP2::Aircraft` (the C++ class in `inc/XPMPAircraft.h`) as
 //! flat `extern "C"` functions operating on an opaque `XPMP2ShimAircraft*` —
-//! see `shim/shim.h`'s doc comment and `PHASES.md` for why a shim, not a
-//! direct `bindgen` binding, is what's here. No safety/ergonomics of its
-//! own; see `xpmp2` for that.
+//! see `shim/shim.h`'s doc comment for why a shim, not a direct `bindgen`
+//! binding, is what's here. No safety/ergonomics of its own; see `xpmp2`
+//! for that.
 
 #![allow(non_upper_case_globals, non_camel_case_types, non_snake_case)]
 

@@ -18,10 +18,18 @@ checks.
   plane-creation API is a C++ class (`XPMP2::Aircraft`, subclass + override
   virtuals), not flat C, despite the SDK's own naming suggesting otherwise
   (`XPCAircraft.h` is itself a deprecated *C++* wrapper class, not a C API).
-  No `xpmp2-sys`/`xpmp2` crates exist yet — see [PHASES.md](PHASES.md) for
-  the design (a hand-written C++ shim exposing the `Aircraft` subclass's
-  virtuals as `extern "C"` functions, since `bindgen` can't synthesize a
-  vtable or let Rust override a C++ virtual method on its own).
+- `xpmp2-sys` — raw FFI over XPMP2: `bindgen` for its flat-C surface
+  (`XPMPMultiplayer.h`), plus a hand-written C++ shim
+  (`xpmp2-sys/shim/shim.h`+`shim.cpp`) exposing `XPMP2::Aircraft`'s virtuals
+  as `extern "C"` functions, since `bindgen` can't synthesize a vtable or let
+  Rust override a C++ virtual method on its own. Compiles XPMP2's own `.cpp`
+  sources directly via the `cc` crate rather than vendoring prebuilt libs.
+- `xpmp2` — safe wrappers over `xpmp2-sys`: `Multiplayer` (RAII init/
+  cleanup), an `Aircraft` trait + RAII `Plane`/`PlaneHandle` over the shim,
+  and (behind the `csl-on-demand` feature) `CslCache`, a synchronous wrapper
+  around the published `flybywireless-csl-client` crate for fetching CSL
+  packages on demand from a `csl-on-demand` server instead of shipping them
+  all locally.
 
 ## SDK headers
 
@@ -50,6 +58,33 @@ way as the rest of the SDK; it's feature-gated purely so a plugin that never
 touches the widgets toolkit doesn't link a DLL it never calls into. Don't
 assume `xplm::widget` is compiled in when checking a build — build/test with
 `--features widgets` explicitly, same as any `XPLM2xx`-`XPLM4xx` combination.
+
+## CSL package loading (`xpmp2`)
+
+`csl-offline` (bulk-load a local CSL library via `Multiplayer::load_csl_package`)
+and `csl-on-demand` (fetch + load exactly one model's package the instant it's
+needed, via the published `flybywireless-csl-client` crate) are two independent
+loading strategies for the same underlying `XPMPLoadCSLPackage` call — not a
+dependency chain, and deliberately mutually exclusive (a `compile_error!` in
+`xpmp2/src/lib.rs` enforces it). Both are opt-in (neither is in `xpmp2`'s
+`default` features): if either were on by default, `cargo build --workspace`
+would hit a Cargo feature-unification conflict the moment any workspace member
+depends on `xpmp2` with the other feature explicitly enabled (Cargo unifies
+features across every selected member in one invocation, including `xpmp2`
+itself built with its own defaults) — see `examples/xpmp2-template`, which
+needs `csl-on-demand`.
+
+`csl-on-demand`'s `CslCache::request` must pass `Plane::new` the *exact*
+`"{root}/{id}"` CSL identifier `csl-on-demand`'s `/match` endpoint already
+resolved server-side (recovered from the fetched package's `xsb_aircraft.txt`,
+since `flybywireless-csl-client`'s `FetchedModel` doesn't expose it directly) —
+never an empty `csl_id`. An empty `csl_id` makes XPMP2 fall back to its own
+local `ChangeModel`/`CSLModelMatching`, which needs `Doc8643.txt`/`related.txt`
+(on-demand mode has no reason to bundle those) and outright fails, via a
+thrown `XPMP2Error`, the first time ever, before any package has been loaded
+(`external/XPMP2/src/CSLModels.cpp`'s `CSLModelMatching` bails out immediately
+if `glob.mapCSLModels` is empty). `Plane::new` asserts against this (panics on
+an empty `csl_id`) when built with `csl-on-demand`.
 
 ## Panic safety
 
@@ -87,6 +122,8 @@ path — see [README.md](README.md#running-tests-windows) for the one-liner.
 
 The pure-XPLM SDK surface (`xplm-sys`/`xplm`/`xplm-macros`, including
 Widgets) is fully ported, with `examples/hello-plugin` and
-`examples/xpl-template` as acceptance tests. Remaining work is XPMP2
-multiplayer support, tracked in [PHASES.md](PHASES.md); keep that file
-updated as work lands instead of duplicating the breakdown here.
+`examples/xpl-template` as acceptance tests. `xpmp2-sys`/`xpmp2` (XPMP2
+multiplayer support, including on-demand CSL package fetching) are also
+built out, with `examples/xpmp2-template` as its acceptance test. See
+[README.md](README.md)'s "Multiplayer (XPMP2)" section for usage; git log
+covers how it was built.

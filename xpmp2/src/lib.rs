@@ -8,16 +8,41 @@ use std::marker::PhantomData;
 use std::os::raw::c_int;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+#[cfg(any(feature = "csl-offline", feature = "csl-on-demand"))]
+use xpmp2_sys::XPMPLoadCSLPackage;
 use xpmp2_sys::{
     xpmp2_shim_aircraft_create, xpmp2_shim_aircraft_dataref_count, xpmp2_shim_aircraft_destroy,
-    xpmp2_shim_aircraft_get_dataref, xpmp2_shim_aircraft_get_location, xpmp2_shim_aircraft_is_valid,
-    xpmp2_shim_aircraft_is_visible, xpmp2_shim_aircraft_mode_s_id, xpmp2_shim_aircraft_set_dataref,
-    xpmp2_shim_aircraft_set_heading, xpmp2_shim_aircraft_set_label,
-    xpmp2_shim_aircraft_set_label_drawn, xpmp2_shim_aircraft_set_local_loc,
-    xpmp2_shim_aircraft_set_location, xpmp2_shim_aircraft_set_on_ground,
-    xpmp2_shim_aircraft_set_pitch, xpmp2_shim_aircraft_set_roll, xpmp2_shim_aircraft_set_velocity,
-    xpmp2_shim_aircraft_set_visible, XPMP2ShimAircraft, XPMPMultiplayerCleanup, XPMPMultiplayerInit,
+    xpmp2_shim_aircraft_get_dataref, xpmp2_shim_aircraft_get_location,
+    xpmp2_shim_aircraft_is_valid, xpmp2_shim_aircraft_is_visible, xpmp2_shim_aircraft_mode_s_id,
+    xpmp2_shim_aircraft_set_dataref, xpmp2_shim_aircraft_set_heading,
+    xpmp2_shim_aircraft_set_label, xpmp2_shim_aircraft_set_label_drawn,
+    xpmp2_shim_aircraft_set_local_loc, xpmp2_shim_aircraft_set_location,
+    xpmp2_shim_aircraft_set_on_ground, xpmp2_shim_aircraft_set_pitch, xpmp2_shim_aircraft_set_roll,
+    xpmp2_shim_aircraft_set_velocity, xpmp2_shim_aircraft_set_visible, XPMP2ShimAircraft,
+    XPMPMultiplayerCleanup, XPMPMultiplayerInit,
 };
+
+// Mutually exclusive on purpose: `csl-offline` (bulk-load a local CSL
+// library up front) and `csl-on-demand` (fetch + load exactly one model's
+// package at a time) are two different loading strategies for the same
+// underlying `XPMPLoadCSLPackage` call, not layers meant to compose. Picking
+// both in one build is almost certainly a Cargo.toml mistake (most likely:
+// enabling `csl-on-demand` without also turning off this crate's default
+// features, which include `csl-offline`) rather than an intentional hybrid,
+// so it's a hard compile error instead of silently allowing both APIs.
+#[cfg(all(feature = "csl-offline", feature = "csl-on-demand"))]
+compile_error!(
+    "xpmp2's `csl-offline` and `csl-on-demand` features are mutually exclusive — \
+     enable only the one matching your plugin's loading strategy. This is most \
+     often a Cargo feature-unification accident in a workspace: if one crate \
+     depends on xpmp2 with `csl-offline` and another with `csl-on-demand`, \
+     building both together unifies onto both being enabled. See CLAUDE.md's \
+     \"CSL package loading\" note for why these are two independent loading \
+     strategies, not a dependency chain."
+);
+
+#[cfg(feature = "csl-on-demand")]
+pub mod csl_on_demand;
 
 /// Only one [`Multiplayer`] may be live at a time — `XPMPMultiplayerInit`/
 /// `XPMPMultiplayerCleanup` are process-wide, not per-handle, same as the
@@ -30,10 +55,20 @@ static INITIALIZED: AtomicBool = AtomicBool::new(false);
 /// hold the returned value for as long as the plugin wants multiplayer
 /// planes; `XPMPMultiplayerCleanup` runs automatically on drop.
 pub struct Multiplayer {
-    // Neither Send nor Sync: XPMP2, like the rest of the XPLM SDK, is only
-    // ever safe to call from X-Plane's main thread.
-    _not_send_sync: PhantomData<*const ()>,
+    // Blocks auto-derived Sync (see the `unsafe impl Send` below) — XPMP2,
+    // like the rest of the XPLM SDK, is only ever safe to call from
+    // X-Plane's main thread, so it must never be shared across threads.
+    _not_sync: PhantomData<*const ()>,
 }
+
+// X-Plane only ever calls into a plugin (XPluginStart/Enable/Disable/Stop,
+// every registered callback) from its single main thread, so there's never
+// concurrent access to a `Multiplayer` — but plugin state holding one still
+// needs to live in a `static Mutex<Option<_>>` (see `register_plugin!`),
+// which requires `Send`. Same rationale as `xplm::dataref::DataRef`/
+// `xplm::processing::FlightLoop`/`xplm::window::Window`/`xplm::menu::Menu`.
+// Not Sync: nothing here supports being read from two threads at once.
+unsafe impl Send for Multiplayer {}
 
 impl Multiplayer {
     /// `plugin_name` is used as the map layer name and in logging.
@@ -62,26 +97,74 @@ impl Multiplayer {
         }
         let plugin_name = CString::new(plugin_name).expect("plugin_name contains a NUL byte");
         let resource_dir = CString::new(resource_dir).expect("resource_dir contains a NUL byte");
-        let default_icao = default_icao.map(|s| CString::new(s).expect("default_icao contains a NUL byte"));
-        let log_acronym = log_acronym.map(|s| CString::new(s).expect("log_acronym contains a NUL byte"));
+        let default_icao =
+            default_icao.map(|s| CString::new(s).expect("default_icao contains a NUL byte"));
+        let log_acronym =
+            log_acronym.map(|s| CString::new(s).expect("log_acronym contains a NUL byte"));
         let result = unsafe {
             XPMPMultiplayerInit(
                 plugin_name.as_ptr(),
                 resource_dir.as_ptr(),
                 None,
-                default_icao.as_ref().map_or(std::ptr::null(), |s| s.as_ptr()),
-                log_acronym.as_ref().map_or(std::ptr::null(), |s| s.as_ptr()),
+                default_icao
+                    .as_ref()
+                    .map_or(std::ptr::null(), |s| s.as_ptr()),
+                log_acronym
+                    .as_ref()
+                    .map_or(std::ptr::null(), |s| s.as_ptr()),
             )
         };
-        let message = unsafe { CStr::from_ptr(result) }.to_string_lossy().into_owned();
+        let message = unsafe { CStr::from_ptr(result) }
+            .to_string_lossy()
+            .into_owned();
         if message.is_empty() {
             Ok(Self {
-                _not_send_sync: PhantomData,
+                _not_sync: PhantomData,
             })
         } else {
             INITIALIZED.store(false, Ordering::SeqCst);
             Err(message)
         }
+    }
+
+    /// Loads a CSL package directory you already have on disk (containing an
+    /// `xsb_aircraft.txt`) — for a plugin that ships/installs its whole CSL
+    /// library locally and loads it up front. Safe to call more than once
+    /// (each additional package's models are added to what's already
+    /// loaded).
+    ///
+    /// This is *not* what [`csl_on_demand`] uses — fetching one model at a
+    /// time and loading only that model's package the moment it's needed is
+    /// the whole point of "on demand"; see [`csl_on_demand::CslCache::request`],
+    /// which loads its fetched package itself rather than routing through
+    /// this method. `load_csl_package` exists purely for the bulk/local-
+    /// library case, which is why it's gated behind its own `csl-offline`
+    /// feature rather than being unconditionally available.
+    ///
+    /// Returns `Err` with XPMP2's human-readable message on failure (empty
+    /// string means success, same convention as [`Multiplayer::init`]).
+    #[cfg(feature = "csl-offline")]
+    pub fn load_csl_package(&self, csl_folder: &str) -> Result<(), String> {
+        load_csl_package_raw(csl_folder)
+    }
+}
+
+/// `XPMPLoadCSLPackage`, shared by [`Multiplayer::load_csl_package`] (behind
+/// `csl-offline`) and [`csl_on_demand::CslCache::request`] (behind
+/// `csl-on-demand`) — deliberately not feature-gated itself, since
+/// on-demand loading must work with `csl-offline` disabled: on-demand means
+/// never bulk-loading a local library, not depending on the API that does.
+#[cfg(any(feature = "csl-offline", feature = "csl-on-demand"))]
+pub(crate) fn load_csl_package_raw(csl_folder: &str) -> Result<(), String> {
+    let csl_folder = CString::new(csl_folder).expect("csl_folder contains a NUL byte");
+    let result = unsafe { XPMPLoadCSLPackage(csl_folder.as_ptr()) };
+    let message = unsafe { CStr::from_ptr(result) }
+        .to_string_lossy()
+        .into_owned();
+    if message.is_empty() {
+        Ok(())
+    } else {
+        Err(message)
     }
 }
 
@@ -102,7 +185,12 @@ pub trait Aircraft {
     /// Update location/attitude/velocity/labels/dataRefs on the `plane`
     /// handle passed in — there is no other way to reach the underlying
     /// `XPMP2ShimAircraft` from here.
-    fn update_position(&mut self, plane: &PlaneHandle, elapsed_since_last_call: f32, fl_counter: i32);
+    fn update_position(
+        &mut self,
+        plane: &PlaneHandle,
+        elapsed_since_last_call: f32,
+        fl_counter: i32,
+    );
 }
 
 /// The subset of a [`Plane`]'s operations meaningful to call from inside
@@ -217,27 +305,56 @@ unsafe extern "C" fn update_position_trampoline(
             raw: refcon.raw,
             _marker: PhantomData,
         };
-        refcon.aircraft.update_position(&plane, elapsed_since_last_call, fl_counter);
+        refcon
+            .aircraft
+            .update_position(&plane, elapsed_since_last_call, fl_counter);
     });
 }
 
 /// RAII handle over a plane created through the C++ shim
-/// (`xpmp2_shim_aircraft_create`/`_destroy`). Requires a live [`Multiplayer`]
-/// (enforced by borrowing one) for as long as the plane exists.
-pub struct Plane<'m> {
+/// (`xpmp2_shim_aircraft_create`/`_destroy`). [`Plane::new`] takes `&
+/// Multiplayer` only as proof one is live *at construction time* — it isn't
+/// stored (a plugin's top-level state struct commonly holds both a
+/// `Multiplayer` and its `Plane`s together, which a borrowed lifetime here
+/// would make self-referential and impossible to express safely). Drop
+/// every `Plane` before dropping `Multiplayer` if you can (simplest way:
+/// declare `Plane`/`Vec<Plane>` fields *before* `Multiplayer` in your struct
+/// — Rust drops struct fields in declaration order, top to bottom);
+/// `XPMPMultiplayerCleanup` itself documents that it's meant to be the
+/// library's last call regardless, so this isn't a hard safety requirement
+/// the way a dangling raw pointer would be.
+pub struct Plane {
     raw: *mut XPMP2ShimAircraft,
     // Owns the boxed Refcon for this plane's whole lifetime; the shim only
     // stores the pointer, so this Box must outlive every future callback.
     _refcon: Box<Refcon>,
-    _multiplayer: PhantomData<&'m Multiplayer>,
 }
 
-impl<'m> Plane<'m> {
+// Same rationale as `Multiplayer`'s `unsafe impl Send` above: X-Plane only
+// ever calls in from its single main thread, but plugin state holding a
+// `Plane` still needs to live in a `static Mutex<Option<_>>`, which
+// requires `Send`. Sync is not implemented (nor derivable, since `raw` is a
+// raw pointer) — nothing here supports concurrent access.
+unsafe impl Send for Plane {}
+
+impl Plane {
     /// `mode_s_id` of `0` lets XPMP2 assign one. Returns `None` if XPMP2
     /// rejected the plane (invalid/duplicate `mode_s_id`, or no CSL model
     /// matched `icao_type`/`icao_airline`/`livery`).
+    ///
+    /// # Panics
+    /// Built with the `csl-on-demand` feature, panics if `csl_id` is empty.
+    /// On-demand mode already resolved the model server-side (see
+    /// `csl_on_demand::FetchedPackage::csl_id`) — an empty `csl_id` here
+    /// would silently fall back to XPMP2's own local Doc8643/ICAO-based
+    /// matching, which needs `Doc8643.txt`/`related.txt` files this mode
+    /// has no reason to bundle, and which outright fails (returning `None`
+    /// from this function, not a panic) the first time ever, before any
+    /// package has been loaded. Passing `""` here under `csl-on-demand` is
+    /// always a bug, not a valid "let XPMP2 match it" call, so it's caught
+    /// immediately instead of failing confusingly later.
     pub fn new(
-        _multiplayer: &'m Multiplayer,
+        _multiplayer: &Multiplayer,
         icao_type: &str,
         icao_airline: &str,
         livery: &str,
@@ -245,6 +362,13 @@ impl<'m> Plane<'m> {
         csl_id: &str,
         aircraft: impl Aircraft + 'static,
     ) -> Option<Self> {
+        #[cfg(feature = "csl-on-demand")]
+        assert!(
+            !csl_id.is_empty(),
+            "xpmp2::Plane::new: csl_id must not be empty under the csl-on-demand feature \
+             — pass csl_on_demand::FetchedPackage::csl_id, not \"\""
+        );
+
         let icao_type = CString::new(icao_type).unwrap_or_default();
         let icao_airline = CString::new(icao_airline).unwrap_or_default();
         let livery = CString::new(livery).unwrap_or_default();
@@ -279,7 +403,6 @@ impl<'m> Plane<'m> {
         Some(Self {
             raw,
             _refcon: refcon,
-            _multiplayer: PhantomData,
         })
     }
 
@@ -291,7 +414,7 @@ impl<'m> Plane<'m> {
     }
 }
 
-impl Drop for Plane<'_> {
+impl Drop for Plane {
     fn drop(&mut self) {
         unsafe {
             xpmp2_shim_aircraft_destroy(self.raw);

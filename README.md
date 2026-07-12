@@ -311,9 +311,8 @@ fn load_object(path: &str) -> LoadObject {
 
 You'd still need something to actually poll this `Future` to completion —
 e.g. a small executor stepped once per `FlightLoop` tick — which is a bigger
-piece of infrastructure than `xplm` provides today (see `PHASES.md` if you're
-considering building one; it'd need to be a crate-level addition, not a
-per-caller pattern, to be worth shipping).
+piece of infrastructure than `xplm` provides today (it'd need to be a
+crate-level addition, not a per-caller pattern, to be worth shipping).
 
 ### Aircraft
 
@@ -413,6 +412,113 @@ collection. Dropping a `Widget` destroys it (and its descendants) natively.
 For entirely custom behavior instead of a built-in class, use
 `create_custom_widget`, which takes a `FnMut(WidgetMessage, WidgetRef, isize,
 isize) -> bool` closure in place of a `WidgetClass`.
+
+### Multiplayer (XPMP2)
+
+Multiplayer traffic (other planes drawn via the [XPMP2](https://github.com/TwinFan/XPMP2)
+library, as used by e.g. LiveTraffic) is a separate crate, `xpmp2`, since it
+depends on a whole second native library rather than XPLM itself:
+
+```toml
+xpmp2 = { version = "..." }
+```
+
+Initialize once (typically in `XPlanePlugin::start`), and implement `Aircraft`
+for your own per-plane state:
+
+```rust
+use xpmp2::{Aircraft, Multiplayer, Plane, PlaneHandle};
+
+struct MyPlane { lat: f64, lon: f64, alt_ft: f64 }
+
+impl Aircraft for MyPlane {
+    fn update_position(&mut self, plane: &PlaneHandle, _elapsed_since_last_call: f32, _fl_counter: i32) {
+        plane.set_location(self.lat, self.lon, self.alt_ft);
+    }
+}
+
+let multiplayer = Multiplayer::init(
+    "My Plugin",
+    "./Resources", // XPMP2's Doc8643.txt/MapIcons.png/related.txt — see below
+    Some("A320"),  // fallback ICAO type if none can be deduced
+    None,
+).expect("XPMPMultiplayerInit failed");
+
+let plane = Plane::new(&multiplayer, "A320", "", "", 0, "", MyPlane { lat: 0.0, lon: 0.0, alt_ft: 5000.0 })
+    .expect("XPMP2 rejected the plane");
+```
+
+`Multiplayer`/`Plane` are `!Sync` (XPMP2, like the rest of XPLM, is only
+safe to call from X-Plane's main thread) but are `Send`, so they're fine to
+hold in plugin state; `Plane::new` takes `&Multiplayer` only as proof one is
+live, not as a stored borrow, specifically so a plugin can own both a
+`Multiplayer` and a growing `Vec<Plane>` without a self-referential struct.
+
+CSL packages (the actual 3D models XPMP2 draws) get into XPMP2 one of two
+mutually-exclusive ways, each its own opt-in feature:
+
+- **`csl-offline`** — a plugin that ships/installs its whole CSL library
+  locally, loaded up front via `Multiplayer::load_csl_package`. This is the
+  path that needs `Doc8643.txt`/`related.txt`/`MapIcons.png` in the
+  `resource_dir` passed to `Multiplayer::init`, since XPMP2 does its own
+  ICAO/livery-based matching (`ChangeModel`) against them.
+- **`csl-on-demand`** — fetch and load exactly one model's package the
+  instant it's needed, via the published
+  [`flybywireless-csl-client`](https://crates.io/crates/flybywireless-csl-client)
+  crate speaking [csl-on-demand](https://github.com/wegylexy/csl-on-demand)'s
+  `/match` + `/manifest` protocol:
+
+  ```toml
+  xpmp2 = { version = "...", default-features = false, features = ["XPLM420", "csl-on-demand"] }
+  ```
+
+  ```rust
+  use std::sync::mpsc;
+  use xpmp2::csl_on_demand::{CslCache, FetchedPackage};
+
+  let csl_cache = CslCache::new(&multiplayer, "https://csl.example.com", "./CSLCache");
+
+  // Non-blocking — modeled on xplm::scenery::Object::load_async's shape.
+  // The callback itself must be Send, but Multiplayer/Plane are
+  // deliberately !Send/!Sync, so it only ever forwards a plain result
+  // through a channel; a flight loop (which alone owns `multiplayer`)
+  // drains that channel and is what actually calls Plane::new — see
+  // examples/xpmp2-template for the full, runnable version.
+  let (fetched_tx, fetched_rx) = mpsc::channel::<Result<FetchedPackage, String>>();
+  csl_cache.request(Some("A320"), None, None, None, move |result| {
+      let _ = fetched_tx.send(result.map_err(|err| err.to_string()));
+  });
+
+  // ...later, from a flight loop callback on the main thread:
+  if let Ok(result) = fetched_rx.try_recv() {
+      match result {
+          Ok(fetched) => {
+              // fetched.csl_id is this model's exact XPMP2 CSL identifier
+              // ("{root}/{id}") — pass it to Plane::new so XPMP2 assigns
+              // this exact, already server-matched model directly, instead
+              // of falling back to local Doc8643/ICAO-based matching.
+              let plane = Plane::new(
+                  &multiplayer, "A320", "", "", 0, &fetched.csl_id,
+                  MyPlane { lat: 0.0, lon: 0.0, alt_ft: 5000.0 },
+              );
+              let _ = plane;
+          }
+          Err(err) => xplm::log(&format!("CSL fetch failed: {err}\n")),
+      }
+  }
+  ```
+
+  Because on-demand mode always supplies an exact `csl_id`, it never needs
+  `Doc8643.txt`/`related.txt`/`MapIcons.png` — `resource_dir` can point at
+  an otherwise-empty directory. Built with `csl-on-demand`, `Plane::new`
+  panics on an empty `csl_id`, since that would silently (and, before any
+  package is loaded, unsuccessfully) fall back to the local matching path
+  this mode is specifically for avoiding.
+
+A full worked example (simulated traffic-spotted event → fetch → load →
+`Plane::new`, all via `mpsc` channels polled from flight loops, never
+blocking the main thread) lives in
+[`examples/xpmp2-template`](examples/xpmp2-template).
 
 ## Running tests (Windows)
 

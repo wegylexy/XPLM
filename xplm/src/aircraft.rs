@@ -27,8 +27,8 @@ pub const USER_AIRCRAFT: i32 = 0;
 
 // XPLMInitFlight/XPLMUpdateFlight (the JSON-based flight-init API) are
 // `#if defined(XPLM430)` — this crate caps its version features at
-// `XPLM420` (see CLAUDE.md/PHASES.md), so they're intentionally not wrapped
-// here, not merely deferred.
+// `XPLM420` (see CLAUDE.md), so they're intentionally not wrapped here, not
+// merely deferred.
 
 /// Changes the user's aircraft to the `.acf` at `path` (a full, not
 /// relative, path) and reinitializes at the nearest airport's first
@@ -120,8 +120,8 @@ impl AircraftAccess {
     /// but you must call `acquire` again *then* to actually take it; a
     /// notification isn't a grant, matching the SDK's own two-step shape
     /// (the same "single-shot callback, not a Future" reasoning as
-    /// `Object::load_async`; see `PHASES.md`/README for why `xplm` doesn't
-    /// wrap these in `async fn`).
+    /// `Object::load_async`; see the README for why `xplm` doesn't wrap
+    /// these in `async fn`).
     pub fn acquire(
         aircraft_paths: Option<&[&str]>,
         on_available: Option<impl FnOnce() + 'static>,
