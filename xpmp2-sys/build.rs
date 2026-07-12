@@ -40,6 +40,7 @@ fn main() {
     let xpmp2_inc = xpmp2_dir.join("inc");
     let xpmp2_src = xpmp2_dir.join("src");
     let xplm_headers = manifest_dir.join("../SDK/CHeaders/XPLM");
+    let shim_dir = manifest_dir.join("shim");
 
     if !xpmp2_inc.join("XPMPMultiplayer.h").is_file() {
         panic!(
@@ -74,6 +75,7 @@ fn main() {
         .include(&xpmp2_inc)
         .include(&xpmp2_src)
         .include(&xplm_headers)
+        .include(&shim_dir)
         // Matches CMakeLists.txt's `target_compile_definitions(XPMP2 PUBLIC
         // XPLM200=1 XPLM210=1 XPLM300=1 XPLM301=1 XPLM303=1 XPLM400=1)` —
         // XPMP2 itself only conditions on these, never anything above
@@ -124,6 +126,11 @@ fn main() {
     for source in SOURCES {
         build.file(xpmp2_src.join(source));
     }
+    // The hand-written C++ shim (see PHASES.md Phase 1's "C++ shim" note)
+    // exposing `XPMP2::Aircraft` as a flat `extern "C"` API — compiled into
+    // the same static lib as XPMP2 itself so there's only one native
+    // archive to link.
+    build.file(shim_dir.join("shim.cpp"));
     build.compile("xpmp2");
 
     // Sources built above call into Winsock (XPMP2::Network for its
@@ -145,11 +152,13 @@ fn main() {
     // crate as its own small `extern "C"` header once it exists.
     let mut builder = bindgen::Builder::default()
         .header(xpmp2_inc.join("XPMPMultiplayer.h").to_str().unwrap())
+        .header(shim_dir.join("shim.h").to_str().unwrap())
         .clang_arg("-x")
         .clang_arg("c++")
         .clang_arg("-std=c++17")
         .clang_arg(format!("-I{}", xpmp2_inc.display()))
         .clang_arg(format!("-I{}", xplm_headers.display()))
+        .clang_arg(format!("-I{}", shim_dir.display()))
         .clang_arg("-DXPLM200=1")
         .clang_arg("-DXPLM210=1")
         .clang_arg("-DXPLM300=1")
@@ -159,6 +168,10 @@ fn main() {
         .allowlist_file(format!(
             "{}.*",
             regex_escape(&xpmp2_inc.join("XPMPMultiplayer.h").to_string_lossy())
+        ))
+        .allowlist_file(format!(
+            "{}.*",
+            regex_escape(&shim_dir.join("shim.h").to_string_lossy())
         ))
         // These few functions take/return `std::string`/`XPMP2::Aircraft*`
         // instead of the plain C types (`const char *`, `bool`, ...) the
@@ -217,4 +230,5 @@ fn main() {
 
     println!("cargo:rerun-if-changed={}", xpmp2_inc.display());
     println!("cargo:rerun-if-changed={}", xpmp2_src.display());
+    println!("cargo:rerun-if-changed={}", shim_dir.display());
 }

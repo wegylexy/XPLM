@@ -31,7 +31,7 @@ preference callbacks, sound (`XPMPSoundEnable`/`XPMPSoundAdd`/...), contrail
 queries — remains plain, non-deprecated `extern "C"`, and `bindgen` handles
 it exactly like every `XPLM*.h` header already ported.
 
-## Phase 1 — XPMP2 sys crate: flat-C lifecycle/sound/CSL (done); C++ shim still open
+## Phase 1 — XPMP2 sys crate: flat-C lifecycle/sound/CSL + C++ shim (done)
 
 - Added `external/XPMP2` as a git submodule (https://github.com/TwinFan/XPMP2.git),
   pinned to `master`/`v3.6.1` (same commit).
@@ -68,18 +68,36 @@ it exactly like every `XPLM*.h` header already ported.
   `Iphlpapi`) dependencies — a `cargo build` alone proved nothing here,
   since with zero Rust code referencing any XPMP2 symbol the linker was
   dropping the whole static archive silently.
-- **The C++ shim** (still needed, not started): for actually creating/
-  updating a plane through `XPMP2::Aircraft`, a hand-written `extern "C"`
-  C++ file (compiled alongside XPMP2 itself by the same `cc::Build`) that
-  defines one concrete subclass whose virtual overrides (`UpdatePosition`
-  is pure virtual; others like `GetFlightId`/`GetAoA`/`SoundGetName` are
-  overridable with defaults) forward into plain C function pointers plus a
-  `void *refcon` — bindgen cannot let Rust override a C++ virtual method or
-  synthesize a vtable on its own. Exposed to `xpmp2-sys` as `extern "C"`
-  create/destroy/update functions operating on an opaque handle, matching
-  the shape of every other SDK surface in this workspace. Considered and
-  rejected: the `cxx` crate's bridge macros — a heavier build-time
-  dependency and a different FFI idiom than every other crate here uses.
+- **The C++ shim**: `xpmp2-sys/shim/shim.h`+`shim.cpp` define one concrete
+  `ShimAircraft : public XPMP2::Aircraft` whose `UpdatePosition` (the one
+  pure-virtual method) forwards into a plain C function pointer + `void
+  *refcon`, compiled into the same static lib as XPMP2 itself. Exposed as
+  `extern "C"` functions operating on an opaque `XPMP2ShimAircraft*`:
+  create/destroy, mode-S-id/valid/visible getters+setters, location (both
+  world lat/lon/alt-ft via `SetLocation`, and local x/y/z directly),
+  pitch/heading/roll, on-ground, cartesian velocity, label, and indexed
+  get/set over the CSL model's animation dataRef array (`XPMP2::Aircraft::v`)
+  — covers everything `UpdatePosition` needs to fill per XPMP2's own docs,
+  not yet every overridable virtual (`GetFlightId`/`GetAoA`/`SoundGetName`/
+  etc. aren't forwarded — add as needed once `xpmp2`'s `Aircraft` trait
+  design in Phase 2 clarifies which of those are worth exposing). The
+  constructor's `std::string` parameters and the `v` vector are handled
+  entirely inside the shim (`const char*` in, `std::string`/`std::vector`
+  never crossing into Rust) — bindgen only ever sees `shim.h`'s plain C
+  types. Constructor exceptions (`XPMP2::XPMP2Error` on invalid/duplicate
+  mode-S-id or no CSL match) are caught in the shim and turned into a `NULL`
+  return, so no C++ exception ever crosses into Rust — the mirror image of
+  why every Rust-side trampoline in this workspace goes through
+  `xplm::guard()`.
+- Considered and rejected: the `cxx` crate's bridge macros for the shim — a
+  heavier build-time dependency and a different FFI idiom than every other
+  crate here uses; the hand-shim keeps `xpmp2-sys` built the same way as
+  `xplm-sys` (a C/C++ compiler via `cc`, `bindgen`, nothing more).
+- **Verified the shim for real too**: a second link-time-resolution test,
+  separate from the flat-C one — `shim.cpp` is a distinct translation unit
+  within the same static archive, and most linkers pull in `.lib`/`.a`
+  members per-symbol, so resolving an `XPMPMultiplayer.cpp` symbol doesn't
+  prove `shim.cpp`'s object file got linked too.
 
 ## Phase 2 — XPMP2 safe wrapper
 
@@ -109,6 +127,22 @@ it exactly like every `XPLM*.h` header already ported.
 - Not started.
 
 ## Phase 3 — CSL package streaming/cache client (feature-gated, in front of XPMP2)
+
+**Superseded by a real reference implementation** — see
+https://github.com/wegylexy/csl-on-demand (C# original) and its `rust-port`
+branch (a from-scratch Rust port of the same server, scaffolded but
+uncommitted, living in its own sibling repo/clone rather than in this
+workspace — it has zero dependency on `xplm`/XPMP2). That project's actual
+wire protocol is simpler than what's sketched below: `GET /match?icao=&
+airline=&livery=` → 302 to `/pack/{root}/{id}` → `multipart/mixed` (model
+matching happens server-side, standard `Accept-Encoding` negotiation
+including zstd via `tower-http`, no bespoke manifest/hash format needed).
+The client-side piece described below (fetch, parse the multipart response,
+materialize into a directory `XPMPLoadCSLPackage` can read) still belongs
+here in `xpmp2` — treat the design below as superseded in its *protocol*
+assumptions (no manifest/BLAKE3/CDN design needed, just speak
+`csl-on-demand`'s existing routes) but still roughly right in its
+*integration point* (materialize, then hand off to XPMP2 unchanged).
 
 Motivation: CSL packages (the actual 3D models XPMP2 draws for multiplayer
 traffic) run into the GBs, and XPMP2's own `XPMPLoadCSLPackage` only knows
