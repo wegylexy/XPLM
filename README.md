@@ -49,3 +49,23 @@ defined together):
 
 Only the versions present in the vendored `SDK/CHeaders` are exposed; there is no
 `XPLM430` feature even if a newer SDK zip defines it, until this crate is updated.
+
+## Running tests (Windows)
+
+`xplm-sys` delay-loads `XPLM_64.dll` (it only exists inside a running X-Plane
+process, so tests must be able to start without it), but any test that actually
+calls into an `XPLM*` function still needs the real DLL on `PATH` to resolve at
+that point. Point `PATH` at a local X-Plane install's `Resources/plugins/`
+directory before running `cargo test`. X-Plane records its own install location
+in `%LocalAppData%\x-plane_install_12.txt` (or `_11.txt`) — read that instead of
+hardcoding a path:
+
+```powershell
+$xpRoot = (Get-Content "$env:LocalAppData\x-plane_install_12.txt" -TotalCount 1).Trim()
+$env:PATH = "$xpRoot\Resources\plugins;$env:PATH"
+cargo test
+```
+
+Tests that don't call into XPLM at all (most unit tests — see
+`xplm::processing::tests`) pass without this; it's only needed once a test
+exercises a real `XPLMCreateFlightLoop`/etc. call.

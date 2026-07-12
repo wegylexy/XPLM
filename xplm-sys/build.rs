@@ -9,6 +9,19 @@ const XPLM_VERSIONS: &[&str] = &[
     "XPLM420",
 ];
 
+/// Escapes regex metacharacters in a filesystem path so it can be used
+/// literally in `bindgen::Builder::allowlist_file`, which takes a regex.
+fn regex_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if "\\.+*?()|[]{}^$".contains(c) {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
+}
+
 fn main() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let sdk_dir = manifest_dir.join("../SDK");
@@ -38,6 +51,13 @@ fn main() {
         .header(headers_dir.join("XPLM/XPLMSound.h").to_str().unwrap())
         .header(headers_dir.join("XPLM/XPLMWeather.h").to_str().unwrap())
         .clang_arg(format!("-I{}", headers_dir.join("XPLM").display()))
+        // Only emit bindings for the XPLM SDK itself — `<windows.h>` (pulled
+        // in transitively on Windows) drags in the entire Win32/COM surface
+        // otherwise, which bloats the crate and ships auto-generated layout
+        // tests for types (VARIANT, CREATESTRUCTA, ...) we don't own and
+        // don't care to verify.
+        .allowlist_file(format!("{}.*", regex_escape(&headers_dir.join("XPLM").display().to_string())))
+        .layout_tests(false)
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()));
 
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
@@ -91,6 +111,12 @@ fn main() {
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
     if target_os == "windows" {
         println!("cargo:rustc-link-lib=dylib=XPLM_64");
+        // XPLM_64.dll only exists inside a running X-Plane process. Delay-load
+        // it so `cargo test`/standalone tools can start (and run everything
+        // that doesn't actually call into the sim) without it on PATH — it's
+        // only resolved lazily, on first real call into an XPLM_* function.
+        println!("cargo:rustc-link-arg=/DELAYLOAD:XPLM_64.dll");
+        println!("cargo:rustc-link-lib=dylib=delayimp");
     }
     // TODO Linux/macOS link flags (bundle-relative rpath, framework search paths) — Phase 1 follow-up.
 

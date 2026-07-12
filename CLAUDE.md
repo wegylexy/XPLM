@@ -38,11 +38,18 @@ Every `extern "C"` trampoline that X-Plane calls back into MUST go through
 `xplm::guard()` (`catch_unwind`). A panic unwinding into the native host is UB —
 treat a missing guard on a new trampoline as a correctness bug, not a style nit.
 
+## Running tests
+
+`XPLM_64.dll` only exists inside a running X-Plane process; `xplm-sys` delay-loads
+it so `cargo test` can start, but any test that actually calls an `XPLM*` function
+still needs it resolvable on `PATH`. Read the real install location from
+`%LocalAppData%\x-plane_install_12.txt` (or `_11.txt`) rather than hardcoding a
+path — see [README.md](README.md#running-tests-windows) for the one-liner.
+
 ## Current phase
 
-Phase 0/1 (workspace scaffold + versioned `xplm-sys` FFI) per the plan agreed with
-the user. See git log / PR description for phase-by-phase breakdown:
-0 scaffold, 1 xplm-sys, 2 panic/RAII primitives, 3 DataRef subsystem, 4 plugin
-lifecycle + trampolines, 5 menu/processing/instance/camera/display, 6 macros,
-7 remaining surfaces (planes/scenery/utilities/widgets/XPMP2), 8 example port parity
-with the original C# `XPL/Program.cs` sample.
+Phase 2 (panic-boundary `guard()` + `FlightLoop` RAII/trampoline pattern) is done
+— see git log for what's landed. Remaining phases (3-8: DataRef subsystem, plugin
+lifecycle, menu/processing/instance/camera/display, macros, remaining surfaces,
+parity example) are tracked in [PHASES.md](PHASES.md); keep that file updated as
+phases complete instead of duplicating the breakdown here.
