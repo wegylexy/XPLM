@@ -1,8 +1,12 @@
 [package]
-name = "xpmp2-sys"
-version = "0.1.0"
+name = "flybywireless-xpmp2-sys"
+version = "0.1.2"
+description = "Raw FFI over XPMP2 for X-Plane multiplayer aircraft"
 edition.workspace = true
+authors.workspace = true
+readme = "README.md"
 license.workspace = true
+repository.workspace = true
 build = "build.rs"
 
 [dependencies]

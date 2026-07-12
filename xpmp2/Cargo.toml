@@ -1,12 +1,16 @@
 [package]
-name = "xpmp2"
-version = "0.1.0"
+name = "flybywireless-xpmp2"
+version = "0.1.2"
+description = "Safe wrappers over flybywireless-xpmp2-sys for X-Plane multiplayer aircraft"
 edition.workspace = true
+authors.workspace = true
+readme = "README.md"
 license.workspace = true
+repository.workspace = true
 
 [dependencies]
-xpmp2-sys = { path = "../xpmp2-sys" }
-xplm = { path = "../xplm", default-features = false }
+xpmp2-sys = { package = "flybywireless-xpmp2-sys", path = "../xpmp2-sys", version = "0.1.2" }
+xplm = { package = "flybywireless-xplm", path = "../xplm", version = "0.1.2", default-features = false }
 
 # Only pulled in behind the `csl-on-demand` feature — see src/csl_on_demand.rs.
 # Published, maintained alongside the csl-on-demand server it talks to, so

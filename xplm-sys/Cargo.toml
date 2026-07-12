@@ -1,8 +1,12 @@
 [package]
-name = "xplm-sys"
-version = "0.1.0"
+name = "flybywireless-xplm-sys"
+version = "0.1.2"
+description = "Raw bindgen FFI bindings over the X-Plane plugin SDK"
 edition.workspace = true
+authors.workspace = true
+readme = "README.md"
 license.workspace = true
+repository.workspace = true
 links = "XPLM"
 build = "build.rs"
 

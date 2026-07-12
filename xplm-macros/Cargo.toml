@@ -1,8 +1,12 @@
 [package]
-name = "xplm-macros"
-version = "0.1.0"
+name = "flybywireless-xplm-macros"
+version = "0.1.2"
+description = "Procedural macros for flybywireless-xplm"
 edition.workspace = true
+authors.workspace = true
+readme = "README.md"
 license.workspace = true
+repository.workspace = true
 
 [lib]
 proc-macro = true
