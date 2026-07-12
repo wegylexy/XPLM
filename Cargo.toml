@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["xplm-sys", "xplm", "xplm-macros"]
+members = ["xplm-sys", "xplm", "xplm-macros", "examples/hello-plugin"]
 
 [workspace.package]
 edition = "2021"

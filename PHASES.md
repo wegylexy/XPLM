@@ -40,15 +40,27 @@ testable before moving to the next.
   assume the sim engine is actually running, not just that the DLL is
   loaded) and is deferred to the Phase 4/5 example plugin's in-sim `/verify`.
 
-## Phase 4 — Plugin lifecycle + trampolines
+## Phase 4 — Plugin lifecycle + trampolines (done)
 
-- Port `XPluginBase.cs`/`Plugin.cs`: `XPlanePlugin` trait
-  (`start/enable/disable/stop`), `extern "C"` trampolines for
-  `XPluginStart/Enable/Disable/Stop/ReceiveMessage`, global
-  `OnceLock<Mutex<Box<dyn XPlanePlugin>>>` registry.
-- Testable: build a minimal example plugin crate, produce a `.xpl`, verify
-  load/unload manually in X-Plane. First point where `/verify`-style in-sim
-  testing applies.
+- Ported `XPluginBase.cs`/`Plugin.cs` to `xplm::plugin::XPlanePlugin`
+  (`start/enable/disable/stop/receive_message`, plus `NAME`/`SIGNATURE`/
+  `DESCRIPTION` consts) and a `register_plugin!($t)` declarative macro
+  generating the five `extern "C"` exports (`XPluginStart/Stop/Enable/
+  Disable/ReceiveMessage`), each wrapped in `guard()`. State lives in a
+  `static Mutex<Option<$t>>` generated per invocation — concrete-typed, no
+  `dyn`/`Box` needed since the macro knows `$t` at expansion time.
+  `register_plugin!` is the mechanism; Phase 6's `#[plugin(...)]` attribute
+  macro will just be sugar over the same generated code.
+- `FlightLoop` needed `unsafe impl Send` to live inside that static Mutex
+  (X-Plane only ever calls back from its main thread, so no concurrent
+  access occurs in practice — not `Sync`, since nothing here supports
+  concurrent reads either).
+- Built `examples/hello-plugin`, a `cdylib` implementing `XPlanePlugin` and
+  using a `FlightLoop` heartbeat, proving Phases 2-4 together. Verified the
+  five required symbols are present in the built DLL. Manual in-sim
+  load/unload verification (actually running it inside X-Plane) is still
+  outstanding — flagged for whenever there's a live X-Plane session to test
+  against, same as the runtime DataRef checks deferred from Phase 3.
 
 ## Phase 5 — Menu, Processing, Instance, Camera, Display/Graphics
 

@@ -3,6 +3,7 @@
 //! Phase 2+ modules (dataref, plugin lifecycle, menus, ...) land here.
 
 pub mod dataref;
+pub mod plugin;
 pub mod processing;
 
 #[cfg(not(test))]
@@ -24,7 +25,7 @@ pub fn guard<F: FnOnce() -> R + std::panic::UnwindSafe, R>(f: F) -> Option<R> {
                 .map(|s| s.to_string())
                 .or_else(|| payload.downcast_ref::<String>().cloned())
                 .unwrap_or_else(|| "panic across xplm FFI boundary".to_string());
-            log_debug(&format!("xplm: caught panic at FFI boundary: {msg}\n"));
+            log(&format!("xplm: caught panic at FFI boundary: {msg}\n"));
             None
         }
     }
@@ -39,7 +40,7 @@ pub fn guard<F: FnOnce() -> R + std::panic::UnwindSafe, R>(f: F) -> Option<R> {
 /// from a bare `cargo test` binary — the DLL exists and loads (delay-load
 /// resolves it against a local X-Plane install), it just isn't operating in
 /// the environment it expects.
-fn log_debug(msg: &str) {
+pub fn log(msg: &str) {
     #[cfg(test)]
     {
         eprint!("{msg}");

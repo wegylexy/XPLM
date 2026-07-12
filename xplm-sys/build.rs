@@ -56,7 +56,10 @@ fn main() {
         // otherwise, which bloats the crate and ships auto-generated layout
         // tests for types (VARIANT, CREATESTRUCTA, ...) we don't own and
         // don't care to verify.
-        .allowlist_file(format!("{}.*", regex_escape(&headers_dir.join("XPLM").display().to_string())))
+        .allowlist_file(format!(
+            "{}.*",
+            regex_escape(&headers_dir.join("XPLM").display().to_string())
+        ))
         .layout_tests(false)
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()));
 
@@ -95,7 +98,9 @@ fn main() {
         println!("cargo:rustc-cfg=feature=\"{define}\"");
     }
 
-    let bindings = builder.generate().expect("unable to generate xplm-sys bindings");
+    let bindings = builder
+        .generate()
+        .expect("unable to generate xplm-sys bindings");
 
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     bindings

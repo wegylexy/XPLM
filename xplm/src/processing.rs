@@ -8,9 +8,9 @@ use std::ffi::c_void;
 use std::os::raw::{c_float, c_int};
 
 use xplm_sys::{
+    xplm_FlightLoop_Phase_AfterFlightModel, xplm_FlightLoop_Phase_BeforeFlightModel,
     XPLMCreateFlightLoop, XPLMCreateFlightLoop_t, XPLMDestroyFlightLoop, XPLMFlightLoopID,
-    XPLMScheduleFlightLoop, xplm_FlightLoop_Phase_AfterFlightModel,
-    xplm_FlightLoop_Phase_BeforeFlightModel,
+    XPLMScheduleFlightLoop,
 };
 
 /// The callback signature X-Plane invokes each flight loop dispatch:
@@ -46,12 +46,19 @@ pub struct FlightLoop {
     refcon: *mut Box<Callback>,
 }
 
-// The closure only ever runs on X-Plane's main thread (flight loop
-// callbacks are never invoked concurrently), so the wrapper itself doesn't
-// need to be Send/Sync for its intended use; left un-derived deliberately.
+// `*mut Box<Callback>` makes this !Send/!Sync by default. X-Plane only ever
+// calls flight loop callbacks (and Drop, if it runs off the same thread)
+// from its single main thread, so there's never concurrent access to the
+// boxed closure — but plugin state holding a FlightLoop still needs to live
+// in a `static Mutex<Option<_>>` (see `register_plugin!`), which requires
+// Send. Not Sync: nothing here supports being read from two threads at once.
+unsafe impl Send for FlightLoop {}
 
 impl FlightLoop {
-    pub fn new(phase: FlightLoopPhase, callback: impl FnMut(f32, f32, i32) -> f32 + 'static) -> Self {
+    pub fn new(
+        phase: FlightLoopPhase,
+        callback: impl FnMut(f32, f32, i32) -> f32 + 'static,
+    ) -> Self {
         let boxed: Box<Callback> = Box::new(callback);
         let refcon = Box::into_raw(Box::new(boxed));
 

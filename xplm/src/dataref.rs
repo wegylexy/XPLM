@@ -157,7 +157,12 @@ impl ArrayElement for i32 {
     }
     unsafe fn set_raw(raw: XPLMDataRef, values: &[Self], offset: i32) {
         unsafe {
-            xplm_sys::XPLMSetDatavi(raw, values.as_ptr() as *mut i32, offset, values.len() as i32)
+            xplm_sys::XPLMSetDatavi(
+                raw,
+                values.as_ptr() as *mut i32,
+                offset,
+                values.len() as i32,
+            )
         }
     }
 }
@@ -173,7 +178,12 @@ impl ArrayElement for f32 {
     }
     unsafe fn set_raw(raw: XPLMDataRef, values: &[Self], offset: i32) {
         unsafe {
-            xplm_sys::XPLMSetDatavf(raw, values.as_ptr() as *mut f32, offset, values.len() as i32)
+            xplm_sys::XPLMSetDatavf(
+                raw,
+                values.as_ptr() as *mut f32,
+                offset,
+                values.len() as i32,
+            )
         }
     }
 }
