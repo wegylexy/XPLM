@@ -180,7 +180,15 @@ impl Drop for Multiplayer {
 /// A multiplayer plane's per-frame behavior — implement this and pass an
 /// instance to [`Plane::new`]. Mirrors overriding `XPMP2::Aircraft` directly
 /// in C++, but through the shim's callback instead of a vtable.
-pub trait Aircraft {
+///
+/// `Any` is a supertrait so callers holding a `&dyn Aircraft`/`&mut dyn
+/// Aircraft` (from [`Plane::aircraft`]/[`Plane::aircraft_mut`]) can recover
+/// their own concrete type via trait-object upcasting
+/// (`(aircraft as &mut dyn Any).downcast_mut::<T>()`) instead of an `unsafe`
+/// pointer-reinterpret cast — `Plane::new`'s own `impl Aircraft + 'static`
+/// bound already requires every implementor to be `'static`, which is all
+/// `Any` needs, so this costs existing implementors nothing.
+pub trait Aircraft: std::any::Any {
     /// Called once per drawing cycle (`XPMP2::Aircraft::UpdatePosition`).
     /// Update location/attitude/velocity/labels/dataRefs on the `plane`
     /// handle passed in — there is no other way to reach the underlying
@@ -417,9 +425,9 @@ impl Plane {
     /// with, e.g. to push a newly-arrived position/config update into a
     /// plane that already has a model loaded, from outside
     /// [`Aircraft::update_position`]. Returns `&dyn Aircraft`/`&mut dyn
-    /// Aircraft` rather than the concrete type — downcast via
-    /// `(dyn Any)::downcast_mut` if you need the concrete type back and add
-    /// `Any` to your `Aircraft` impl's bounds.
+    /// Aircraft` rather than the concrete type — recover it via
+    /// `(aircraft as &mut dyn std::any::Any).downcast_mut::<T>()` (see
+    /// [`Aircraft`]'s `Any` supertrait).
     pub fn aircraft(&self) -> &dyn Aircraft {
         &*self._refcon.aircraft
     }

@@ -1,6 +1,6 @@
 [package]
 name = "flybywireless-xpmp2"
-version = "0.1.4"
+version = "0.1.5"
 description = "Safe wrappers over flybywireless-xpmp2-sys for X-Plane multiplayer aircraft"
 edition.workspace = true
 authors.workspace = true

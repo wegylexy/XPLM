@@ -727,7 +727,19 @@ isize) -> bool` closure in place of a `WidgetClass`.
 
 Multiplayer traffic (other planes drawn via the [XPMP2](https://github.com/TwinFan/XPMP2)
 library, as used by e.g. LiveTraffic) is a separate crate, `xpmp2`, since it
-depends on a whole second native library rather than XPLM itself:
+depends on a whole second native library rather than XPLM itself.
+
+XPMP2 itself requires **X-Plane 11.10 or later** — it draws planes via the
+[instancing API](https://developer.x-plane.com/sdk/XPLMInstance/)
+(`XPLMCreateInstance`/`XPLMInstanceSetPosition`), introduced in that release.
+This is baked into `xpmp2-sys`'s `build.rs`, which always compiles XPMP2's
+C++ sources against the instancing API regardless of which `xplm`/`xplm-sys`
+`XPLM2xx`/`XPLM3xx`/`XPLM4xx` Cargo features your own plugin enables — those
+features only gate the Rust `xplm` wrappers, not `xpmp2`'s C++ dependency.
+There's no compile-time floor tying the two together, so a plugin that also
+needs to run on older X-Plane can still build with `xplm/XPLM200`; on those
+older sims, `Multiplayer::init` below simply returns `Err` (XPMP2's own
+`XPMPMultiplayerInit` failure message) instead of failing to compile.
 
 ```toml
 xpmp2 = { version = "..." }
