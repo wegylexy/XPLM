@@ -520,6 +520,90 @@ A full worked example (simulated traffic-spotted event → fetch → load →
 blocking the main thread) lives in
 [`examples/xpmp2-template`](examples/xpmp2-template).
 
+## Hot-reloading a plugin under development
+
+A DLL can't unload itself, and X-Plane only ever loads whatever's registered
+in `Resources/plugins/` at startup — so the usual edit/rebuild/test loop means
+stopping the sim. [`examples/hot-reload-xpl`](examples/hot-reload-xpl) +
+[`examples/hot-reload-dll`](examples/hot-reload-dll) demonstrate a loader/
+payload split that avoids that:
+
+- **`hot-reload-xpl`** is a thin loader plugin. It's the only one that
+  actually gets copied into `Resources/plugins/` (as `64/win.xpl`, `64/mac.xpl`,
+  or `64/lin.xpl`), and it never needs rebuilding — it just forwards every SDK
+  callback to whatever payload library is currently named in a watch file,
+  polling once a second for a new build and swapping it in
+  (`libloading::Library` load/drop — `LoadLibraryW`/`FreeLibrary` on Windows,
+  `dlopen`/`dlclose` on macOS/Linux) without touching the sim. Nothing in the
+  loader's own forwarding/swap logic is platform-specific — `libloading`
+  already abstracts that, and `xplm-sys` already builds for all three target
+  OSes — only *where the watch file lives* differs (see below).
+- **`hot-reload-dll`** is the payload — an ordinary plugin crate, rebuilt on
+  every edit. This example's payload tunes COM1 to a hard-coded frequency
+  once (`FlightLoop` + `xplm::dataref::ReadWrite`), so you can change the
+  frequency, rebuild, and watch it get retuned in-sim without a restart.
+
+The watch file lives at `dirs::data_local_dir()/xplm-hotreload/hot-reload-example.json`
+— `%LocalAppData%\xplm-hotreload\...` on Windows, `~/Library/Application
+Support/xplm-hotreload/...` on macOS, `${XDG_DATA_HOME:-~/.local/share}/xplm-hotreload/...`
+on Linux. The loader and the build task must agree on this exact path; the
+fixed filename is fine for this one example, but a reusable version of this
+pattern should derive it from a hash of the payload crate's manifest directory
+instead, so multiple hot-reloaded projects on one machine don't collide.
+
+> **macOS/Linux caveat:** the `.vscode/tasks.json` scripts for those two
+> platforms assume X-Plane's installer records its install location at
+> `~/Library/Preferences/x-plane_install_12.txt` (macOS) and
+> `~/.x-plane_install_12.txt` (Linux), mirroring the documented Windows
+> `%LocalAppData%\x-plane_install_12.txt` convention. That mirroring hasn't
+> been verified against a real macOS/Linux X-Plane install — if the "ensure
+> X-Plane running"/"install loader" tasks can't find that file on your
+> machine, adjust the path in `tasks.json` to wherever it actually lives (or
+> hardcode your install root there instead). The mac/Linux `hot-reload: build
+> payload` task also needs `jq` installed to parse `cargo`'s JSON build
+> output, and the mac/Linux `launch.json` attach config needs the CodeLLDB
+> VS Code extension.
+
+Because cargo's own artifact-name hash is based on package/feature/profile
+metadata, not source content, two builds of unchanged config still produce the
+same output filename even after editing source — which Windows won't let you
+overwrite while the old one is loaded. The build task instead passes a fresh
+`-C extra-filename` (a timestamp) to `cargo rustc` on every build, so each
+build gets a genuinely unique DLL name and the lock never applies.
+
+Also worth knowing about attaching a debugger: Windows debuggers attach to
+the whole `X-Plane.exe` process, not to an individual loaded module — there's
+no way around that. In practice this still feels scoped to just your plugin,
+since X-Plane's own code carries no debug symbols and you only ever set
+breakpoints in your payload's source.
+
+### F5 in VS Code
+
+Open `examples/hot-reload-xpl` as the VS Code workspace root (its `.vscode/`
+holds the config). Hitting F5 on a completely clean checkout, with X-Plane not
+even running, does everything automatically:
+
+1. **`hot-reload: ensure X-Plane running`** — starts X-Plane (found via the
+   install-location file described above) if it isn't already running, and
+   waits for the process to appear. A fully cold X-Plane launch takes a while
+   to reach its main loop, so the very first F5 on a machine may need longer
+   than subsequent ones before attach succeeds — that's the sim's own boot
+   time, not something this task can speed up.
+2. **`hot-reload: install loader`** — builds `hot-reload-xpl` and copies it
+   into `<X-Plane>/Resources/plugins/hot-reload-xpl/64/{win,mac,lin}.xpl` (per
+   OS), unconditionally, every run (so a previously-copied loader can never go
+   stale unnoticed).
+3. **`hot-reload: build payload`** — builds `hot-reload-dll` with a unique
+   `-C extra-filename`, then writes the watch file.
+4. VS Code then attaches its debugger to X-Plane (`cppvsdbg` on Windows,
+   CodeLLDB on macOS/Linux — pick the matching launch config for your OS).
+   Breakpoints set in `hot-reload-dll`'s source resolve once the loader's next
+   1Hz tick picks up the new build.
+
+From then on: edit `COM1_FREQ_833` in `examples/hot-reload-dll/src/lib.rs`,
+hit F5 again, and the new frequency gets tuned within about a second — no
+restart, no manual copying.
+
 ## Running tests (Windows)
 
 `xplm-sys` delay-loads `XPLM_64.dll` (it only exists inside a running X-Plane

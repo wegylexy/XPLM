@@ -1,0 +1,21 @@
+[package]
+name = "hot-reload-xpl"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+xplm = { package = "flybywireless-xplm", path = "../../xplm" }
+libloading = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Cross-platform equivalent of %LocalAppData% for the watch-file location —
+# xplm-sys/xplm already build for windows/macos/linux (see xplm-sys/build.rs),
+# so the loader/payload forwarding logic here needs no per-OS code at all;
+# only "where's the watch file" differs.
+dirs = "5"

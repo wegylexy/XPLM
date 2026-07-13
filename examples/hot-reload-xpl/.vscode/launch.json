@@ -1,0 +1,23 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Hot reload: attach to X-Plane (Windows)",
+      "type": "cppvsdbg",
+      "request": "attach",
+      // Adjust if your install uses a different executable name, e.g.
+      // "X-Plane_x64.exe" on some distributions.
+      "processName": "X-Plane.exe",
+      "preLaunchTask": "hot-reload: build payload"
+    },
+    {
+      "name": "Hot reload: attach to X-Plane (macOS/Linux)",
+      // Requires the CodeLLDB extension (vadimcn.vscode-lldb).
+      "type": "lldb",
+      "request": "attach",
+      "program": "X-Plane",
+      "pid": "${command:pickProcess}",
+      "preLaunchTask": "hot-reload: build payload"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+[package]
+name = "hot-reload-dll"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+xplm = { package = "flybywireless-xplm", path = "../../xplm" }
