@@ -635,22 +635,25 @@ no way around that. In practice this still feels scoped to just your plugin,
 since X-Plane's own code carries no debug symbols and you only ever set
 breakpoints in your payload's source.
 
-### F5 in VS Code
+### Run and Debug (F5) in VS Code (and Antigravity IDE-alikes)
 
-Open `examples/hot-reload-xpl` as the VS Code workspace root (its `.vscode/`
-holds the config). Hitting F5 on a completely clean checkout, with X-Plane not
+Open `examples/hot-reload-xpl` as the workspace root (its `.vscode/`
+holds the config, which VS Code-derived IDEs such as Antigravity also read).
+Hitting F5 on a completely clean checkout, with X-Plane not
 even running, does everything automatically:
 
-1. **`hot-reload: ensure X-Plane running`** — starts X-Plane (found via the
+1. **`hot-reload: install loader`** — builds `hot-reload-xpl` and copies it
+   into `<X-Plane>/Resources/plugins/hot-reload-xpl/64/{win,mac,lin}.xpl` (per
+   OS), unconditionally, every run (so a previously-copied loader can never go
+   stale unnoticed). This runs *before* X-Plane is started, since X-Plane only
+   loads plugins present at boot — installing after launch would leave a
+   freshly-started X-Plane without the loader until the next restart.
+2. **`hot-reload: ensure X-Plane running`** — starts X-Plane (found via the
    install-location file described above) if it isn't already running, and
    waits for the process to appear. A fully cold X-Plane launch takes a while
    to reach its main loop, so the very first F5 on a machine may need longer
    than subsequent ones before attach succeeds — that's the sim's own boot
    time, not something this task can speed up.
-2. **`hot-reload: install loader`** — builds `hot-reload-xpl` and copies it
-   into `<X-Plane>/Resources/plugins/hot-reload-xpl/64/{win,mac,lin}.xpl` (per
-   OS), unconditionally, every run (so a previously-copied loader can never go
-   stale unnoticed).
 3. **`hot-reload: build payload`** — builds `hot-reload-dll` with a unique
    `-C extra-filename`, then writes the watch file.
 4. VS Code then attaches its debugger to X-Plane (`cppvsdbg` on Windows,

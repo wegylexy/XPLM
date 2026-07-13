@@ -16,6 +16,7 @@
         "command": "bash",
         "args": ["${workspaceFolder}/scripts/ensure-xplane-running.sh"]
       },
+      "dependsOn": ["hot-reload: install loader"],
       "presentation": {
         "reveal": "silent",
         "close": false
@@ -37,7 +38,6 @@
         "command": "bash",
         "args": ["${workspaceFolder}/scripts/install-loader.sh"]
       },
-      "dependsOn": ["hot-reload: ensure X-Plane running"],
       "problemMatcher": ["$rustc"]
     },
     {
