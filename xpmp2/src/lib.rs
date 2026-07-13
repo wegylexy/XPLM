@@ -412,6 +412,22 @@ impl Plane {
             _marker: PhantomData,
         }
     }
+
+    /// Reaches back into the [`Aircraft`] impl this `Plane` was constructed
+    /// with, e.g. to push a newly-arrived position/config update into a
+    /// plane that already has a model loaded, from outside
+    /// [`Aircraft::update_position`]. Returns `&dyn Aircraft`/`&mut dyn
+    /// Aircraft` rather than the concrete type — downcast via
+    /// `(dyn Any)::downcast_mut` if you need the concrete type back and add
+    /// `Any` to your `Aircraft` impl's bounds.
+    pub fn aircraft(&self) -> &dyn Aircraft {
+        &*self._refcon.aircraft
+    }
+
+    /// See [`Self::aircraft`].
+    pub fn aircraft_mut(&mut self) -> &mut dyn Aircraft {
+        &mut *self._refcon.aircraft
+    }
 }
 
 impl Drop for Plane {

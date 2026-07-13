@@ -8,6 +8,10 @@ pub use xplm_macros::plugin;
 /// Derives `find() -> Option<Self>` for a `#[dataref = "..."]`-tagged
 /// struct — see [`xplm_macros::DataRefContainer`] for the full example.
 pub use xplm_macros::DataRefContainer;
+/// Derives `publish(shared) -> Option<FooHandles>` for a struct of plain
+/// values backing published datarefs — see
+/// [`xplm_macros::PublishedDataRefContainer`] for the full example.
+pub use xplm_macros::PublishedDataRefContainer;
 
 pub mod aircraft;
 pub mod camera;

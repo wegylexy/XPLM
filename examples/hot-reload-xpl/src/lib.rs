@@ -58,7 +58,11 @@ struct WatchFile {
 /// (or `~/.local/share`) on Linux. Loader and build task must agree on this
 /// path exactly — see this crate's `.vscode/tasks.json`.
 fn watch_file_path() -> Option<PathBuf> {
-    Some(dirs::data_local_dir()?.join("xplm-hotreload").join(WATCH_FILE_NAME))
+    Some(
+        dirs::data_local_dir()?
+            .join("xplm-hotreload")
+            .join(WATCH_FILE_NAME),
+    )
 }
 
 fn read_watch_file() -> Option<WatchFile> {
@@ -134,7 +138,9 @@ impl LoadedPayload {
                 "hot-reload-xpl: failed to clean up old payload file {path:?}: {e}\n"
             ));
         } else {
-            xplm::log(&format!("hot-reload-xpl: cleaned up old payload file {path:?}\n"));
+            xplm::log(&format!(
+                "hot-reload-xpl: cleaned up old payload file {path:?}\n"
+            ));
         }
     }
 }
@@ -152,7 +158,10 @@ static LOADER_STATE: Mutex<Option<LoaderState>> = Mutex::new(None);
 /// payload plus the name/signature/description *it* reported — used both to
 /// seed the loader's own identity on first start, and to log what got loaded
 /// on later swaps.
-fn load_payload(payload_path: &str, build_id: &str) -> Option<(LoadedPayload, String, String, String)> {
+fn load_payload(
+    payload_path: &str,
+    build_id: &str,
+) -> Option<(LoadedPayload, String, String, String)> {
     let library = match unsafe { Library::new(payload_path) } {
         Ok(library) => library,
         Err(e) => {
@@ -176,7 +185,11 @@ fn load_payload(payload_path: &str, build_id: &str) -> Option<(LoadedPayload, St
                 return None;
             }
         };
-        start(name_buf.as_mut_ptr(), sig_buf.as_mut_ptr(), desc_buf.as_mut_ptr());
+        start(
+            name_buf.as_mut_ptr(),
+            sig_buf.as_mut_ptr(),
+            desc_buf.as_mut_ptr(),
+        );
     }
 
     let to_string = |buf: &[c_char; 256]| unsafe {
@@ -320,7 +333,11 @@ pub extern "C" fn XPluginDisable() {
 }
 
 #[no_mangle]
-pub extern "C" fn XPluginReceiveMessage(from_who: XPLMPluginID, message: c_int, param: *mut c_void) {
+pub extern "C" fn XPluginReceiveMessage(
+    from_who: XPLMPluginID,
+    message: c_int,
+    param: *mut c_void,
+) {
     xplm::guard(|| {
         let guard = LOADER_STATE.lock().unwrap();
         if let Some(payload) = guard.as_ref().and_then(|state| state.payload.as_ref()) {

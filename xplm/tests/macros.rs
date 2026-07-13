@@ -6,4 +6,5 @@ fn ui() {
     let t = trybuild::TestCases::new();
     t.pass("tests/ui/plugin_attribute.rs");
     t.pass("tests/ui/dataref_container.rs");
+    t.pass("tests/ui/published_dataref_container.rs");
 }

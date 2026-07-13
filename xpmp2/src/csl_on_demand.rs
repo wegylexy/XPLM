@@ -39,8 +39,9 @@
 //! API surface here would just be two ways to do the same thing for no
 //! caller who isn't already committed to an async runtime of their own.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
 use anyhow::{Context, Result};
@@ -50,6 +51,7 @@ use xplm::processing::{FlightLoop, FlightLoopPhase};
 use crate::Multiplayer;
 
 /// A fetched-and-loaded CSL package, ready for [`crate::Plane::new`].
+#[derive(Clone)]
 pub struct FetchedPackage {
     /// The materialized package directory (already handed to
     /// `XPMPLoadCSLPackage` by the time your callback runs).
@@ -67,14 +69,20 @@ pub struct FetchedPackage {
     pub csl_id: String,
 }
 
+/// De-dup key for [`CslCache::request`] — identical `icao`/`airline`/
+/// `livery`/`seed` are treated as the same model.
+type RequestKey = (Option<String>, Option<String>, Option<String>, Option<u8>);
+
 /// One pending [`CslCache::request`] — sent to the background worker thread.
 struct Job {
+    key: RequestKey,
     icao: Option<String>,
     airline: Option<String>,
     livery: Option<String>,
     seed: Option<u8>,
-    callback: Box<dyn FnOnce(Result<FetchedPackage>) + Send>,
 }
+
+type Waiters = Arc<Mutex<HashMap<RequestKey, Vec<Box<dyn FnOnce(Result<FetchedPackage>) + Send>>>>>;
 
 /// Recovers this package's exact CSL id from its freshly-materialized
 /// `xsb_aircraft.txt` — `flybywireless-csl-client`'s `FetchedModel` doesn't
@@ -104,6 +112,15 @@ fn read_csl_id(package_dir: &Path) -> Result<String> {
 pub struct CslCache {
     jobs_tx: mpsc::Sender<Job>,
     out_dir: PathBuf,
+    // Requests currently in flight (fetch started, result not yet
+    // delivered), keyed by icao/airline/livery/seed. `request` consults this
+    // before sending a new `Job` — a second call for a key already present
+    // just appends its callback to the waiter list instead of kicking off a
+    // duplicate fetch. `Arc<Mutex<_>>` (not `Rc<RefCell<_>>`) purely to keep
+    // `CslCache` itself `Send`, matching every other XPLM handle stored in a
+    // `static Mutex<Option<_>>` plugin-state slot — actual access is still
+    // only ever from the main thread, so there's no real contention.
+    in_flight: Waiters,
     // Keeps the completion-draining flight loop (see `new`) registered for
     // as long as this `CslCache` is alive; unregisters (and stops
     // delivering callbacks) on `Drop`, same as every other XPLM RAII handle
@@ -127,7 +144,12 @@ impl CslCache {
     ) -> Self {
         let out_dir = out_dir.into();
         let (jobs_tx, jobs_rx) = mpsc::channel::<Job>();
-        let (completed_tx, completed_rx) = mpsc::channel::<Box<dyn FnOnce() + Send>>();
+        // Worker thread reports the raw fetch result (not yet loaded into
+        // XPMP2, and not yet dispatched to any waiter) keyed by request —
+        // the flight loop below does the main-thread-only load and the
+        // fan-out to every waiting callback for that key.
+        let (completed_tx, completed_rx) =
+            mpsc::channel::<(RequestKey, Result<FetchedPackage, String>)>();
 
         let worker_base_url = base_url.into();
         let worker_out_dir = out_dir.clone();
@@ -140,12 +162,11 @@ impl CslCache {
             };
             let client = ModelClient::new(reqwest::Client::new(), worker_base_url, worker_out_dir);
             for job in jobs_rx {
-                // Both the CSL-id recovery (reads the just-written
-                // xsb_aircraft.txt off disk) and the eventual
-                // XPMPLoadCSLPackage call are safe to do off the main
-                // thread — file I/O isn't main-thread-bound, only the
-                // XPMP2 call itself is, which is why it's deferred into the
-                // thunk below rather than done here.
+                // The CSL-id recovery (reads the just-written
+                // xsb_aircraft.txt off disk) is safe to do off the main
+                // thread — file I/O isn't main-thread-bound. The eventual
+                // XPMPLoadCSLPackage call is, so it's deferred to the flight
+                // loop below rather than done here.
                 let result = runtime
                     .block_on(client.request(
                         job.icao.as_deref(),
@@ -159,29 +180,33 @@ impl CslCache {
                             package_dir: model.package_dir,
                             csl_id,
                         })
-                    });
-                // The XPMPLoadCSLPackage call happens inside the thunk, run
-                // by the flight loop below, not here — it's only safe from
-                // the X-Plane main thread, and this closure runs on the
-                // background worker thread.
-                let callback = job.callback;
-                let thunk: Box<dyn FnOnce() + Send> = Box::new(move || {
-                    let result = result.and_then(|fetched| {
-                        crate::load_csl_package_raw(&fetched.package_dir.to_string_lossy())
-                            .map_err(|message| anyhow::anyhow!(message))?;
-                        Ok(fetched)
-                    });
-                    callback(result);
-                });
-                if completed_tx.send(thunk).is_err() {
+                    })
+                    .map_err(|err| err.to_string());
+                if completed_tx.send((job.key, result)).is_err() {
                     break; // CslCache was dropped; nothing left to deliver to.
                 }
             }
         });
 
+        let in_flight: Waiters = Arc::new(Mutex::new(HashMap::new()));
+        let in_flight_for_loop = Arc::clone(&in_flight);
         let poll_loop = FlightLoop::new(FlightLoopPhase::AfterFlightModel, move |_, _, _| {
-            for thunk in completed_rx.try_iter() {
-                thunk();
+            for (key, result) in completed_rx.try_iter() {
+                let waiters = in_flight_for_loop
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .remove(&key)
+                    .unwrap_or_default();
+                if waiters.is_empty() {
+                    continue;
+                }
+                let loaded = result.and_then(|fetched| {
+                    crate::load_csl_package_raw(&fetched.package_dir.to_string_lossy())?;
+                    Ok(fetched)
+                });
+                for callback in waiters {
+                    callback(loaded.clone().map_err(|message| anyhow::anyhow!(message)));
+                }
             }
             -1.0 // check again next frame — completions should surface promptly.
         });
@@ -190,6 +215,7 @@ impl CslCache {
         Self {
             jobs_tx,
             out_dir,
+            in_flight,
             _poll_loop: poll_loop,
         }
     }
@@ -205,6 +231,12 @@ impl CslCache {
     /// Safe to call repeatedly for the same model — an already-cached,
     /// already-loaded package resolves with no network I/O beyond the
     /// `/match` lookup and a harmless repeat `XPMPLoadCSLPackage` call.
+    ///
+    /// Also safe to call again for the same `icao`/`airline`/`livery`/`seed`
+    /// while an earlier call for it is still in flight: this de-dups by that
+    /// key rather than firing a second fetch — every callback registered for
+    /// the same key while a fetch is pending is delivered the same result
+    /// once it completes.
     pub fn request(
         &self,
         icao: Option<&str>,
@@ -213,16 +245,36 @@ impl CslCache {
         seed: Option<u8>,
         callback: impl FnOnce(Result<FetchedPackage>) + Send + 'static,
     ) {
+        let key = (
+            icao.map(str::to_string),
+            airline.map(str::to_string),
+            livery.map(str::to_string),
+            seed,
+        );
+        let mut in_flight = self
+            .in_flight
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(waiters) = in_flight.get_mut(&key) {
+            waiters.push(Box::new(callback));
+            return;
+        }
+        in_flight.insert(key.clone(), vec![Box::new(callback)]);
+        drop(in_flight);
+
         // An error here means the worker thread already exited (e.g. it
         // failed to build its Tokio runtime) — the callback is simply never
         // called, same as `Object::load_async` returning `false` and never
-        // invoking its callback on a bad path.
+        // invoking its callback on a bad path. The now-stranded `in_flight`
+        // entry is harmless: a later `request` for the same key would just
+        // queue behind it, also never firing, which matches "nothing here
+        // works anymore" already being true once the worker thread is gone.
         let _ = self.jobs_tx.send(Job {
+            key,
             icao: icao.map(str::to_string),
             airline: airline.map(str::to_string),
             livery: livery.map(str::to_string),
             seed,
-            callback: Box::new(callback),
         });
     }
 

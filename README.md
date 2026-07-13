@@ -1,7 +1,8 @@
 # XPLM (Rust)
 
 Idiomatic Rust bindings for the X-Plane plugin SDK, spanning `xplm-sys` (raw FFI),
-`xplm` (safe wrappers), and `xplm-macros` (`#[plugin]`, `#[derive(DataRefContainer)]`).
+`xplm` (safe wrappers), and `xplm-macros` (`#[plugin]`, `#[derive(DataRefContainer)]`,
+`#[derive(PublishedDataRefContainer)]`).
 
 ## Getting the SDK
 
@@ -223,24 +224,276 @@ it).
 ### Reading datarefs with `#[derive(DataRefContainer)]`
 
 Tag each field with the dataref path it should be found by; `find()` looks all
-of them up at once, failing if any single one isn't currently registered:
+of them up at once, failing if any single one isn't currently registered.
+Fields can be typed either way, and the two styles can even be mixed in one
+struct (see below):
+
+- **Wrapper-typed** — spell out `ReadOnly<T>`/`ReadWrite<T>` (or an
+  `ArrayDataRef`/`DataBytes` variant) yourself; `find()` returns `Self`, with
+  each field stored as that exact wrapper:
+
+  ```rust
+  use xplm::dataref::{ReadOnly, ReadWrite};
+
+  #[derive(xplm::DataRefContainer)]
+  struct AircraftTelemetry {
+      #[dataref = "sim/flightmodel/position/latitude"]
+      latitude: ReadOnly<f64>,
+      #[dataref = "sim/flightmodel/position/longitude"]
+      longitude: ReadOnly<f64>,
+      #[dataref = "sim/cockpit2/engine/actuators/throttle_ratio_all"]
+      throttle: ReadWrite<f32>,
+  }
+
+  let telemetry = AircraftTelemetry::find().expect("dataref(s) not found");
+  let lat = telemetry.latitude.get();
+  telemetry.throttle.set(0.75); // only compiles because it's ReadWrite<f32>
+  ```
+
+- **Plain-typed** — just write the plain `i32`/`f32`/`f64`/`Vec<u8>`/
+  `Vec<i32>`/`Vec<f32>` value type (the last two map to `ReadOnlyArray<T>`/
+  `ReadWriteArray<T>` internally), tagging a field `#[writable]` if you
+  intend to set it, not just read it. A field of any other type tagged
+  `#[packed]` is treated as `T: PackedDataRef` (see below) instead — its
+  getter returns `Option<T>`, not `T`, since a byte-length mismatch is
+  possible. There's no per-field wrapper to store *in* `Self` this way
+  (nothing here needs `Self` to hold real values — every getter/setter is a
+  live `XPLMGetData*`/`XPLMSetData*` call), so `find()` instead returns a
+  companion `FooHandle` with a getter (and, for `#[writable]` fields, a
+  `set_*` setter) per field — same shape `PublishedDataRefContainer`'s
+  `Handle` uses, minus the `Rc<RefCell<_>>` (there's no local state to buffer
+  on this side):
+
+  ```rust
+  #[derive(xplm::DataRefContainer)]
+  struct NavRadioReader {
+      #[dataref = "MyAvionics/Nav1/frequency_khz"]
+      frequency_khz: i32,
+      #[dataref = "MyAvionics/Nav1/course_deg"]
+      #[writable]
+      course_deg: f32,
+  }
+
+  let radio = NavRadioReader::find().expect("dataref(s) not found");
+  let freq: i32 = radio.frequency_khz(); // getter, even though not #[writable]
+  radio.set_course_deg(90.0); // setter, only exists because #[writable]
+
+  // Bulk counterparts of the per-field getters/setters above:
+  let snapshot: NavRadioReader = radio.get(); // every field read in one call
+  radio.set(&NavRadioReader { frequency_khz: 0, course_deg: 90.0 }); // every
+      // #[writable] field written in one call — frequency_khz isn't
+      // #[writable], so its value here is ignored (there's no setter to
+      // call it through)
+  ```
+
+  `NavRadioReader` above is still never constructed by generated code
+  *besides* `get()`/`set()` — it's the schema `find()` reads to build
+  `NavRadioReaderHandle`, and `get()`'s return type / `set()`'s parameter
+  type. If your code never calls `get()` either, expect (and feel free to
+  `#[allow(dead_code)]`) an unused-field warning on it.
+
+- **Mixing both** — plain-typed and wrapper-typed fields can coexist in one
+  struct, as long as every wrapper-typed field is specifically `ReadOnly<T>`/
+  `ReadWrite<T>`/`ReadOnlyBytes`/`ReadWriteBytes`/`ReadOnlyStruct<T>`/
+  `ReadWriteStruct<T>`/`ReadOnlyArray<T>`/`ReadWriteArray<T>` (a raw
+  `DataRef<T, A>`/`ArrayDataRef<T, A>` mixed in this way is a compile error —
+  there's no single plain value to represent it with below). Wrapper-typed
+  fields land in the
+  `Handle` exactly as declared (same direct `.get()`/`.set()` access as the
+  wrapper-typed style above); plain-typed fields still get a generated
+  getter/setter. Since `Self` can't double as the bulk snapshot type anymore
+  (its wrapper-typed fields aren't plain values), `get()`/`set()` use a
+  separate generated `FooSnapshot` instead, with a plain value for every
+  field regardless of which style it was declared with:
+
+  ```rust
+  use xplm::dataref::ReadWriteBytes;
+
+  #[derive(xplm::DataRefContainer)]
+  #[dataref_prefix = "MyAvionics/Nav1/"]
+  struct NavRadioMixed {
+      frequency_khz: i32, // plain
+      #[dataref = "MyAvionics/Shared/active_nav_ident"]
+      ident: ReadWriteBytes, // wrapper-typed
+  }
+
+  let radio = NavRadioMixed::find().expect("dataref(s) not found");
+  let freq: i32 = radio.frequency_khz(); // generated getter (plain field)
+  radio.ident.set(0, b"KABC"); // direct field access (wrapper-typed field)
+
+  let snapshot: NavRadioMixedSnapshot = radio.get(); // both kinds of field in one snapshot
+  radio.set(&NavRadioMixedSnapshot { frequency_khz: 0, ident: b"KDEF".to_vec() });
+  ```
+
+Either style (or the mixed style) also accepts a struct-level
+`#[dataref_prefix = "..."]` — same
+attribute, same behavior as `PublishedDataRefContainer`'s: prepended to any
+field that omits its own `#[dataref = "..."]`, using the field's name as the
+suffix, while a field with an explicit `#[dataref = "..."]` still uses that
+path exactly as written:
 
 ```rust
-use xplm::dataref::{ReadOnly, ReadWrite};
-
 #[derive(xplm::DataRefContainer)]
-struct AircraftTelemetry {
-    #[dataref = "sim/flightmodel/position/latitude"]
-    latitude: ReadOnly<f64>,
-    #[dataref = "sim/flightmodel/position/longitude"]
-    longitude: ReadOnly<f64>,
-    #[dataref = "sim/cockpit2/engine/actuators/throttle_ratio_all"]
-    throttle: ReadWrite<f32>,
+#[dataref_prefix = "MyAvionics/Nav1/"]
+struct NavRadioReader {
+    frequency_khz: i32,      // -> "MyAvionics/Nav1/frequency_khz"
+    #[writable]
+    course_deg: f32,         // -> "MyAvionics/Nav1/course_deg"
+    #[dataref = "MyAvionics/Shared/active_nav_ident"] // explicit: skips the prefix
+    #[writable]
+    ident: Vec<u8>,
+}
+```
+
+### Packed-struct datarefs (`PackedDataRef`/`DataStruct`/`PublishedStruct`)
+
+Some datarefs (byte-string, `xplmType_Data`) carry a fixed-size binary struct
+rather than an arbitrary-length byte string — `xplm::dataref::DataStruct<T>`
+(finding/reading, the `PackedDataRef` counterpart to `DataBytes`) and
+`xplm::dataref::PublishedStruct<T>` (publishing, the counterpart to
+`PublishedData`) read/write `T`'s raw bytes directly instead of handing you a
+`Vec<u8>` to parse yourself.
+
+`T` must implement the `unsafe trait PackedDataRef: Copy` marker — you
+implement it yourself, asserting `T` is `#[repr(C)]` (or `#[repr(C, packed)]`)
+with no padding you care about, no pointers, and no niches that make some
+byte pattern invalid (no `bool`/`char`/`NonZero*`/enums anywhere in the
+layout — the same contract as `bytemuck::Pod`, without the dependency):
+
+```rust
+use xplm::dataref::{PackedDataRef, ReadWriteStruct};
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct NavState {
+    frequency_khz: i32,
+    course_deg: f32,
 }
 
-let telemetry = AircraftTelemetry::find().expect("dataref(s) not found");
-let lat = telemetry.latitude.get();
-telemetry.throttle.set(0.75); // only compiles because it's ReadWrite<f32>
+unsafe impl PackedDataRef for NavState {}
+
+let radio = ReadWriteStruct::<NavState>::find("MyAvionics/Nav1/packed")
+    .expect("dataref not found");
+if let Some(state) = radio.get() {
+    // `get()` returns `None` if the dataref's current byte length doesn't
+    // match `size_of::<NavState>()` — wrong dataref, or a different
+    // version of this struct on the other end.
+    let _freq = state.frequency_khz;
+}
+radio.set(NavState { frequency_khz: 121_500, course_deg: 90.0 });
+```
+
+Publishing one works the same way as `PublishedData`, just handing whole `T`
+values to `read`/`write` instead of `Vec<u8>`/`&[u8]`:
+
+```rust
+use xplm::dataref::PublishedStructReadWrite;
+
+let published = PublishedStructReadWrite::<NavState>::publish_writable(
+    "MyAvionics/Nav1/packed",
+    move || /* read current NavState */ NavState { frequency_khz: 108_000, course_deg: 0.0 },
+    move |new_state: NavState| { /* apply new_state */ },
+);
+```
+
+A published packed struct also accepts a *partial* write from another
+plugin/script (`XPLMSetDatab` at some offset/length short of the whole
+struct) — `PublishedStruct` reconstructs the full value by reading the
+current one, splicing in the incoming bytes, and calling your `write`
+closure with the merged result, so a caller updating just one field doesn't
+clobber the rest. To do the same from the *consumer* side — writing (or
+reading) a single field of someone else's published packed struct without
+transferring the whole thing — pair `std::mem::offset_of!` with
+`get_field`/`set_field` (or the raw `get_bytes`/`set_bytes`):
+
+```rust
+let course_offset = std::mem::offset_of!(NavState, course_deg);
+radio.set_field(course_offset, 90.0f32); // writes only course_deg's 4 bytes
+let course: Option<f32> = radio.get_field(course_offset);
+```
+
+### Publishing datarefs with `#[derive(PublishedDataRefContainer)]`
+
+The other direction from `DataRefContainer` above: publishing datarefs of
+your own (`XPLMRegisterDataAccessor`) for other plugins/scripts to read.
+Scalar fields (`i32`/`f32`/`f64`) go out via `xplm::dataref::PublishedDataRef`;
+a `Vec<u8>` field goes out as X-Plane's byte-string type (`xplmType_Data`) via
+`xplm::dataref::PublishedData`; a `Vec<i32>`/`Vec<f32>` field goes out as an
+array dataref via `xplm::dataref::PublishedArray`; a field of any other type
+tagged `#[packed]` (`T: PackedDataRef`, see below) goes out via
+`xplm::dataref::PublishedStruct`. Tag a field `#[writable]` if *other*
+plugins should be allowed to set it via `XPLMSetData*` — that's the only
+thing the attribute controls; your own code can always read *and* write
+every field through the generated `Handle`, `#[writable]` or not, since the
+value has to live in a plain struct field either way.
+
+A struct-level `#[dataref_prefix = "..."]` is prepended to any field that
+doesn't specify its own `#[dataref = "..."]`, using the field's name as the
+suffix — a field that *does* give an explicit `#[dataref = "..."]` uses that
+path exactly as written, skipping the prefix entirely:
+
+```rust
+#[derive(xplm::PublishedDataRefContainer)]
+#[dataref_prefix = "MyAvionics/Nav1/"]
+struct NavRadio {
+    frequency_khz: i32, // -> "MyAvionics/Nav1/frequency_khz" — read-only to other plugins
+    #[writable]
+    course_deg: f32, // -> "MyAvionics/Nav1/course_deg" — other plugins may XPLMSetDataf this one
+    #[dataref = "MyAvionics/Shared/active_nav_ident"] // explicit path: skips the prefix
+    #[writable]
+    ident: Vec<u8>,
+}
+```
+
+`publish(self)` consumes the struct, wraps it in shared state for you, and
+hands back a single `Handle` — cheap to `Clone`, one getter/`set_*` pair per
+field. Every published dataref stays registered for as long as *any* clone of
+that `Handle` is alive, and unregisters automatically once the last one
+drops — there's no second value to separately hold onto or drop:
+
+```rust
+let radio = NavRadio { frequency_khz: 108_000, course_deg: 0.0, ident: Vec::new() }
+    .publish()
+    .expect("failed to register one or more datarefs");
+
+// From your own flight loop, updating a read-only-to-others dataref:
+radio.set_frequency_khz(0); // compiles even though frequency_khz isn't #[writable] —
+                             // #[writable] only gates other plugins' XPLMSetData*, not yours
+
+// From your own flight loop, updating a writable-by-others dataref:
+radio.set_course_deg(90.0);
+
+// Getters exist for every field regardless of #[writable]:
+let current_course: f32 = radio.course_deg();
+
+// `radio` is cheap to clone — hand a clone to a closure/flight loop that
+// needs to update it later without borrowing `radio` itself. The datarefs
+// stay published as long as either clone (or any further clone of either)
+// is still alive.
+let radio_for_loop = radio.clone();
+let update = move || radio_for_loop.set_course_deg(radio_for_loop.course_deg() + 1.0);
+```
+
+Any *other* plugin (or a Lua script, or a dataref-viewer tool) reads/writes
+these back the same way it would any other dataref — `#[derive(DataRefContainer)]`,
+same as above, just pointed at the paths this plugin published (using its
+plain-typed style here, since there's no reason for a consumer to spell out
+`ReadOnly`/`ReadWriteBytes` itself):
+
+```rust
+#[derive(xplm::DataRefContainer)]
+struct NavRadioReader {
+    #[dataref = "MyAvionics/Nav1/frequency_khz"]
+    frequency_khz: i32,
+    #[dataref = "MyAvionics/Shared/active_nav_ident"]
+    #[writable]
+    ident: Vec<u8>,
+}
+
+let reader = NavRadioReader::find().expect("dataref(s) not found");
+assert_eq!(reader.frequency_khz(), 108_000);
+reader.set_ident(b"KABC".to_vec()); // only compiles because ident was #[writable]
+let bytes: Vec<u8> = reader.ident();
 ```
 
 ### Commands
@@ -511,6 +764,11 @@ hold in plugin state; `Plane::new` takes `&Multiplayer` only as proof one is
 live, not as a stored borrow, specifically so a plugin can own both a
 `Multiplayer` and a growing `Vec<Plane>` without a self-referential struct.
 
+To push a new position/config update into a plane that already has a model
+placed — from outside `Aircraft::update_position` itself — `Plane::aircraft`/
+`aircraft_mut` reach back into the `Aircraft` impl the `Plane` was
+constructed with, returning `&dyn Aircraft`/`&mut dyn Aircraft`.
+
 CSL packages (the actual 3D models XPMP2 draws) get into XPMP2 one of two
 mutually-exclusive ways, each its own opt-in feature:
 
@@ -545,6 +803,10 @@ mutually-exclusive ways, each its own opt-in feature:
   csl_cache.request(Some("A320"), None, None, None, move |result| {
       let _ = fetched_tx.send(result.map_err(|err| err.to_string()));
   });
+  // Safe to call request() again for the same icao/airline/livery/seed
+  // while this fetch is still in flight — CslCache de-dups by that key
+  // and delivers the same result to every callback registered for it,
+  // rather than firing a second HTTP round trip.
 
   // ...later, from a flight loop callback on the main thread:
   if let Ok(result) = fetched_rx.try_recv() {
