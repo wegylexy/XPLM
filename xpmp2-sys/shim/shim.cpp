@@ -1,5 +1,7 @@
 #include "shim.h"
 
+#include <cstring>
+
 #include "XPMPAircraft.h"
 
 namespace {
@@ -34,6 +36,31 @@ inline ShimAircraft* cast(XPMP2ShimAircraft* p) { return reinterpret_cast<ShimAi
 inline const ShimAircraft* cast(const XPMP2ShimAircraft* p) { return reinterpret_cast<const ShimAircraft*>(p); }
 
 inline const char* orEmpty(const char* s) { return s ? s : ""; }
+
+/// Copies `s` into `buf` (up to `buf_len - 1` bytes, NUL-terminated), same
+/// truncation contract as BSD `strlcpy`. `buf`/`buf_len` of `0`/`NULL` is a
+/// no-op. Returns `s.size()` either way, so callers can detect truncation by
+/// comparing the return value against `buf_len`.
+size_t copyToBuf(const std::string& s, char* buf, size_t buf_len)
+{
+    if (buf && buf_len > 0) {
+        size_t n = s.size() < buf_len - 1 ? s.size() : buf_len - 1;
+        std::memcpy(buf, s.data(), n);
+        buf[n] = '\0';
+    }
+    return s.size();
+}
+
+/// `XPMPInfoTexts_t`'s fields are fixed-size `char[]` arrays, not
+/// `std::string` — copies `s` in, truncating to fit, always NUL-terminated.
+template <size_t N>
+void copyToField(const char* s, char (&field)[N])
+{
+    size_t n = std::strlen(s);
+    if (n > N - 1) n = N - 1;
+    std::memcpy(field, s, n);
+    field[n] = '\0';
+}
 
 } // namespace
 
@@ -172,6 +199,210 @@ void xpmp2_shim_aircraft_set_dataref(XPMP2ShimAircraft* aircraft, size_t index, 
     if (index < a->v.size()) {
         a->v[index] = value;
     }
+}
+
+void xpmp2_shim_aircraft_set_radar(XPMP2ShimAircraft* aircraft, long code, int mode)
+{
+    auto* a = cast(aircraft);
+    a->acRadar.code = code;
+    a->acRadar.mode = static_cast<XPMPTransponderMode>(mode);
+}
+
+void xpmp2_shim_aircraft_set_label_color(XPMP2ShimAircraft* aircraft, float r, float g, float b, float a)
+{
+    auto* ac = cast(aircraft);
+    ac->colLabel[0] = r;
+    ac->colLabel[1] = g;
+    ac->colLabel[2] = b;
+    ac->colLabel[3] = a;
+}
+
+void xpmp2_shim_aircraft_set_vert_ofs_ratio(XPMP2ShimAircraft* aircraft, float ratio)
+{
+    cast(aircraft)->vertOfsRatio = ratio;
+}
+
+float xpmp2_shim_aircraft_get_vert_ofs(const XPMP2ShimAircraft* aircraft)
+{
+    return const_cast<ShimAircraft*>(cast(aircraft))->GetVertOfs();
+}
+
+void xpmp2_shim_aircraft_set_gear_deflect_ratio(XPMP2ShimAircraft* aircraft, float ratio)
+{
+    cast(aircraft)->gearDeflectRatio = ratio;
+}
+
+void xpmp2_shim_aircraft_set_clamp_to_ground(XPMP2ShimAircraft* aircraft, int clamp)
+{
+    cast(aircraft)->bClampToGround = (clamp != 0);
+}
+
+void xpmp2_shim_aircraft_set_ai_priority(XPMP2ShimAircraft* aircraft, int priority)
+{
+    cast(aircraft)->aiPrio = priority;
+}
+
+void xpmp2_shim_aircraft_set_render(XPMP2ShimAircraft* aircraft, int render)
+{
+    cast(aircraft)->SetRender(render != 0);
+}
+
+int xpmp2_shim_aircraft_is_rendered(const XPMP2ShimAircraft* aircraft)
+{
+    return cast(aircraft)->IsRendered() ? 1 : 0;
+}
+
+int xpmp2_shim_aircraft_tcas_target_idx(const XPMP2ShimAircraft* aircraft)
+{
+    return cast(aircraft)->GetTcasTargetIdx();
+}
+
+int xpmp2_shim_aircraft_is_shown_as_tcas_target(const XPMP2ShimAircraft* aircraft)
+{
+    return cast(aircraft)->IsCurrentlyShownAsTcasTarget() ? 1 : 0;
+}
+
+int xpmp2_shim_aircraft_is_shown_as_ai(const XPMP2ShimAircraft* aircraft)
+{
+    return cast(aircraft)->IsCurrentlyShownAsAI() ? 1 : 0;
+}
+
+int xpmp2_shim_aircraft_show_as_ai_plane(const XPMP2ShimAircraft* aircraft)
+{
+    return cast(aircraft)->ShowAsAIPlane() ? 1 : 0;
+}
+
+float xpmp2_shim_aircraft_camera_dist(const XPMP2ShimAircraft* aircraft)
+{
+    return cast(aircraft)->GetCameraDist();
+}
+
+float xpmp2_shim_aircraft_camera_bearing(const XPMP2ShimAircraft* aircraft)
+{
+    return cast(aircraft)->GetCameraBearing();
+}
+
+float xpmp2_shim_aircraft_ground_speed_kn(const XPMP2ShimAircraft* aircraft)
+{
+    return cast(aircraft)->GetGS_kn();
+}
+
+int xpmp2_shim_aircraft_is_related_to(const XPMP2ShimAircraft* aircraft, const char* icao_type)
+{
+    return cast(aircraft)->IsRelatedTo(orEmpty(icao_type)) ? 1 : 0;
+}
+
+int xpmp2_shim_aircraft_is_ground_vehicle(const XPMP2ShimAircraft* aircraft)
+{
+    return cast(aircraft)->IsGroundVehicle() ? 1 : 0;
+}
+
+int xpmp2_shim_aircraft_is_glider(const XPMP2ShimAircraft* aircraft)
+{
+    return cast(aircraft)->IsGlider() ? 1 : 0;
+}
+
+int xpmp2_shim_aircraft_change_model(
+    XPMP2ShimAircraft* aircraft,
+    const char* icao_type,
+    const char* icao_airline,
+    const char* livery)
+{
+    return cast(aircraft)->ChangeModel(orEmpty(icao_type), orEmpty(icao_airline), orEmpty(livery));
+}
+
+int xpmp2_shim_aircraft_rematch_model(XPMP2ShimAircraft* aircraft)
+{
+    return cast(aircraft)->ReMatchModel();
+}
+
+int xpmp2_shim_aircraft_match_quality(const XPMP2ShimAircraft* aircraft)
+{
+    return cast(aircraft)->GetMatchQuality();
+}
+
+size_t xpmp2_shim_aircraft_get_model_name(const XPMP2ShimAircraft* aircraft, char* buf, size_t buf_len)
+{
+    return copyToBuf(cast(aircraft)->GetModelName(), buf, buf_len);
+}
+
+size_t xpmp2_shim_aircraft_get_flight_id(const XPMP2ShimAircraft* aircraft, char* buf, size_t buf_len)
+{
+    return copyToBuf(cast(aircraft)->GetFlightId(), buf, buf_len);
+}
+
+void xpmp2_shim_aircraft_set_info_texts(
+    XPMP2ShimAircraft* aircraft,
+    const char* tail_num,
+    const char* icao_ac_type,
+    const char* manufacturer,
+    const char* model,
+    const char* icao_airline,
+    const char* airline,
+    const char* flight_num,
+    const char* apt_from,
+    const char* apt_to)
+{
+    auto& t = cast(aircraft)->acInfoTexts;
+    copyToField(orEmpty(tail_num), t.tailNum);
+    copyToField(orEmpty(icao_ac_type), t.icaoAcType);
+    copyToField(orEmpty(manufacturer), t.manufacturer);
+    copyToField(orEmpty(model), t.model);
+    copyToField(orEmpty(icao_airline), t.icaoAirline);
+    copyToField(orEmpty(airline), t.airline);
+    copyToField(orEmpty(flight_num), t.flightNum);
+    copyToField(orEmpty(apt_from), t.aptFrom);
+    copyToField(orEmpty(apt_to), t.aptTo);
+}
+
+void xpmp2_shim_aircraft_set_wing_span(XPMP2ShimAircraft* aircraft, float meters)
+{
+    cast(aircraft)->SetWingSpan(meters);
+}
+
+void xpmp2_shim_aircraft_set_wing_area(XPMP2ShimAircraft* aircraft, float square_meters)
+{
+    cast(aircraft)->SetWingArea(square_meters);
+}
+
+void xpmp2_shim_aircraft_set_mass(XPMP2ShimAircraft* aircraft, float kg)
+{
+    cast(aircraft)->SetMass(kg);
+}
+
+void xpmp2_shim_aircraft_wake_apply_defaults(XPMP2ShimAircraft* aircraft, int overwrite_all)
+{
+    cast(aircraft)->WakeApplyDefaults(overwrite_all != 0);
+}
+
+void xpmp2_shim_aircraft_contrail_request(XPMP2ShimAircraft* aircraft, unsigned num, unsigned dist_m, unsigned life_time_s)
+{
+    cast(aircraft)->ContrailRequest(num, dist_m, life_time_s);
+}
+
+void xpmp2_shim_aircraft_contrail_remove(XPMP2ShimAircraft* aircraft)
+{
+    cast(aircraft)->ContrailRemove();
+}
+
+unsigned xpmp2_shim_aircraft_contrail_trigger(XPMP2ShimAircraft* aircraft)
+{
+    return cast(aircraft)->ContrailTrigger();
+}
+
+void xpmp2_shim_aircraft_set_sound_min_dist(XPMP2ShimAircraft* aircraft, int meters)
+{
+    cast(aircraft)->sndMinDist = meters;
+}
+
+void xpmp2_shim_aircraft_set_sound_muted(XPMP2ShimAircraft* aircraft, int mute)
+{
+    cast(aircraft)->SoundMuteAll(mute != 0);
+}
+
+int xpmp2_shim_aircraft_is_sound_muted(const XPMP2ShimAircraft* aircraft)
+{
+    return cast(aircraft)->SoundIsMuted() ? 1 : 0;
 }
 
 } // extern "C"
