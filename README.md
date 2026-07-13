@@ -5,28 +5,85 @@ Idiomatic Rust bindings for the X-Plane plugin SDK, spanning `xplm-sys` (raw FFI
 
 ## Getting the SDK
 
-The X-Plane SDK headers/libraries are not vendored in this repo. Download and unzip
-them before building:
+The X-Plane SDK headers/libraries aren't tracked by git in this repo (both are
+gitignored, per each crate's own `vendor/` path below) — run the fetch script
+once per machine:
 
-1. Download the SDK zip: https://developer.x-plane.com/wp-content/plugins/code-sample-generation/sdk_zip_files/XPSDK430.zip
-2. Unzip it at the repository root so you end up with:
+```powershell
+.\scripts\fetch-xplm-sdk.ps1
+```
+```bash
+./scripts/fetch-xplm-sdk.sh
+```
 
-   ```
-   XPLM/
-   ├── SDK/
-   │   ├── CHeaders/
-   │   ├── Libraries/
-   │   ├── license.txt
-   │   └── README.txt
-   ├── xplm-sys/
-   ├── xplm/
-   └── xplm-macros/
-   ```
+This downloads the SDK zip and places it in both locations this workspace's
+build scripts expect:
 
-   The zip's top-level folder is typically named after its release (e.g. `XPSDK430`) —
-   rename it to `SDK` after extracting.
+```
+XPLM/
+├── xplm-sys/vendor/xplm-sdk/       # full SDK — xplm-sys/build.rs
+│   ├── CHeaders/
+│   ├── Libraries/
+│   └── license.txt
+├── xpmp2-sys/vendor/xplm-sdk/      # headers-only subset — xpmp2-sys/build.rs
+│   └── CHeaders/XPLM/
+├── xpmp2-sys/vendor/XPMP2/         # git submodule, see below
+├── xplm-sys/
+├── xplm/
+└── xplm-macros/
+```
 
-`SDK/` is gitignored; `xplm-sys`'s `build.rs` reads headers/libs from it at build time.
+(The zip's top-level folder is already named `SDK` — all-caps — once
+extracted; no manual renaming needed.)
+
+Both crates also honor an `XPLM_SDK_DIR` env var if you'd rather point at a
+different SDK checkout instead of the vendored copy (e.g. a shared CI cache,
+or a newer SDK version than this repo currently targets) — set it to a
+directory containing `CHeaders/`+`Libraries/` and skip the fetch script.
+
+`xpmp2-sys`/`xpmp2` also need the `XPMP2` git submodule, at
+`xpmp2-sys/vendor/XPMP2`:
+
+```
+git submodule update --init xpmp2-sys/vendor/XPMP2
+```
+
+(or set `XPMP2_SRC_DIR` to point at your own checkout instead).
+
+Because both crates' `Cargo.toml` explicitly `include` their `vendor/`
+contents in the published package (despite `.gitignore`), a `cargo publish`
+build and a real `cargo add`'d downstream consumer both get the SDK/XPMP2
+source baked into the crate with no separate download step — this repo's own
+gitignored `vendor/` copies are what a maintainer populates (via the fetch
+script) before running `cargo publish`.
+
+### Publishing a release
+
+`cargo publish -p flybywireless-xplm-sys` (and `-xpmp2-sys`) will always
+refuse without `--allow-dirty`, even on an otherwise fully-committed working
+tree — this isn't a sign something's wrong. `cargo publish`'s dirty-check
+walks every file the package is about to include and checks whether *each
+one* is tracked by git; `vendor/xplm-sdk`/`vendor/XPMP2` are deliberately
+gitignored (see above), so they always show up as "untracked" to that check
+regardless of the rest of the repo's state. `--allow-dirty` is the correct,
+expected flag for these two crates specifically, every release — not a
+one-time workaround.
+
+Publish in dependency order, since crates.io needs a dependency to already
+be resolvable before a dependent crate's own `cargo publish` verify-build can
+succeed:
+
+```
+cargo publish -p flybywireless-xplm-sys --allow-dirty
+cargo publish -p flybywireless-xplm-macros
+cargo publish -p flybywireless-xplm
+cargo publish -p flybywireless-xpmp2-sys --allow-dirty
+cargo publish -p flybywireless-xpmp2
+```
+
+`cargo publish` itself waits for each crate to become resolvable on
+crates.io's index before returning, so no manual delay is needed between
+these — just run them in order.
 
 ## Supported X-Plane / XPLM versions
 
@@ -47,7 +104,7 @@ defined together):
 | `XPLM410` | 12.1.0+               |
 | `XPLM420` | 12.3.0+ (default)     |
 
-Only the versions present in the vendored `SDK/CHeaders` are exposed; there is no
+Only the versions present in the vendored `xplm-sys/vendor/xplm-sdk/CHeaders` are exposed; there is no
 `XPLM430` feature even if a newer SDK zip defines it, until this crate is updated.
 
 ## Usage
@@ -374,7 +431,7 @@ the positions after it, the same reindexing hazard as `xplm::menu`.
 
 ### Widgets
 
-The widgets UI toolkit (`SDK/CHeaders/Widgets`) is behind the opt-in
+The widgets UI toolkit (`xplm-sys/vendor/xplm-sdk/CHeaders/Widgets`) is behind the opt-in
 `widgets` Cargo feature — it links a second native library
 (`XPWidgets_64`), so plugins that don't use it don't pay for that:
 
@@ -551,18 +608,19 @@ fixed filename is fine for this one example, but a reusable version of this
 pattern should derive it from a hash of the payload crate's manifest directory
 instead, so multiple hot-reloaded projects on one machine don't collide.
 
-> **macOS/Linux caveat:** the `.vscode/tasks.json` scripts for those two
-> platforms assume X-Plane's installer records its install location at
-> `~/Library/Preferences/x-plane_install_12.txt` (macOS) and
-> `~/.x-plane_install_12.txt` (Linux), mirroring the documented Windows
-> `%LocalAppData%\x-plane_install_12.txt` convention. That mirroring hasn't
-> been verified against a real macOS/Linux X-Plane install — if the "ensure
-> X-Plane running"/"install loader" tasks can't find that file on your
-> machine, adjust the path in `tasks.json` to wherever it actually lives (or
-> hardcode your install root there instead). The mac/Linux `hot-reload: build
-> payload` task also needs `jq` installed to parse `cargo`'s JSON build
-> output, and the mac/Linux `launch.json` attach config needs the CodeLLDB
-> VS Code extension.
+The install-location file lookup (`examples/hot-reload-xpl/scripts/find-xplane-root.{ps1,sh}`,
+used by both the "ensure X-Plane running" and "install loader" tasks) follows
+X-Plane's own documented convention: `%LocalAppData%\x-plane_install_12.txt`
+(Windows), `~/Library/Preferences/x-plane_install_12.txt` (macOS),
+`~/.x-plane/x-plane_install_12.txt` (Linux) — falling back to each `_11.txt`.
+Per that same documentation, the file can list multiple install locations,
+including stale/moved ones, so the scripts scan every line and use the first
+one that actually has a `Resources` subfolder, rather than trusting line 1.
+
+> **Prerequisites for macOS/Linux:** the `hot-reload: build payload` task
+> needs `jq` installed to parse `cargo`'s JSON build output, and the
+> mac/Linux `launch.json` attach config needs the CodeLLDB VS Code
+> extension.
 
 Because cargo's own artifact-name hash is based on package/feature/profile
 metadata, not source content, two builds of unchanged config still produce the

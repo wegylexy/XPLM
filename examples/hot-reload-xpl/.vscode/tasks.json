@@ -4,30 +4,17 @@
     {
       "label": "hot-reload: ensure X-Plane running",
       "type": "shell",
-      "options": {
-        "cwd": "${workspaceFolder}/../.."
-      },
       "windows": {
         "command": "pwsh",
-        "args": [
-          "-NoProfile",
-          "-Command",
-          "$installFile = \"$env:LocalAppData\\x-plane_install_12.txt\"; if (-not (Test-Path $installFile)) { $installFile = \"$env:LocalAppData\\x-plane_install_11.txt\" }\nif (-not (Test-Path $installFile)) { throw 'No X-Plane install-location file found under %LocalAppData%; launch X-Plane manually once first.' }\n$xpRoot = (Get-Content $installFile -TotalCount 1).Trim()\nif (-not (Get-Process -Name 'X-Plane*' -ErrorAction SilentlyContinue)) {\n  $exe = Get-ChildItem -Path $xpRoot -Filter 'X-Plane*.exe' -File | Select-Object -First 1\n  if (-not $exe) { throw \"Could not find an X-Plane executable under $xpRoot\" }\n  Write-Host \"Starting $($exe.FullName)...\"\n  Start-Process -FilePath $exe.FullName\n  $deadline = (Get-Date).AddSeconds(120)\n  while (-not (Get-Process -Name 'X-Plane*' -ErrorAction SilentlyContinue)) {\n    if ((Get-Date) -gt $deadline) { throw 'Timed out waiting for X-Plane to start.' }\n    Start-Sleep -Seconds 1\n  }\n  Write-Host 'X-Plane process detected; it may still be mid-boot (first cold launch can take a while before flight loops start ticking).'\n} else {\n  Write-Host 'X-Plane already running.'\n}"
-        ]
+        "args": ["-NoProfile", "-File", "${workspaceFolder}/scripts/ensure-xplane-running.ps1"]
       },
       "osx": {
         "command": "bash",
-        "args": [
-          "-c",
-          "# NOTE: this install-location file path is a best-known convention, not verified against a real macOS X-Plane install — adjust if it doesn't match yours.\ninstallFile=\"$HOME/Library/Preferences/x-plane_install_12.txt\"\n[ -f \"$installFile\" ] || installFile=\"$HOME/Library/Preferences/x-plane_install_11.txt\"\nif ! pgrep -f 'X-Plane' > /dev/null; then\n  if [ ! -f \"$installFile\" ]; then echo 'No X-Plane install-location file found; launch X-Plane manually once first.' >&2; exit 1; fi\n  xpRoot=$(head -n1 \"$installFile\" | tr -d '\\r\\n')\n  app=$(find \"$xpRoot\" -maxdepth 1 -iname 'X-Plane*.app' | head -n1)\n  if [ -z \"$app\" ]; then echo \"Could not find an X-Plane.app under $xpRoot\" >&2; exit 1; fi\n  echo \"Starting $app...\"\n  open \"$app\"\n  deadline=$((SECONDS + 120))\n  until pgrep -f 'X-Plane' > /dev/null; do\n    if [ $SECONDS -gt $deadline ]; then echo 'Timed out waiting for X-Plane to start.' >&2; exit 1; fi\n    sleep 1\n  done\n  echo 'X-Plane process detected; first cold launch can take a while before flight loops start ticking.'\nelse\n  echo 'X-Plane already running.'\nfi"
-        ]
+        "args": ["${workspaceFolder}/scripts/ensure-xplane-running.sh"]
       },
       "linux": {
         "command": "bash",
-        "args": [
-          "-c",
-          "# NOTE: this install-location file path is a best-known convention, not verified against a real Linux X-Plane install — adjust if it doesn't match yours.\ninstallFile=\"$HOME/.x-plane_install_12.txt\"\n[ -f \"$installFile\" ] || installFile=\"$HOME/.x-plane_install_11.txt\"\nif ! pgrep -f 'X-Plane' > /dev/null; then\n  if [ ! -f \"$installFile\" ]; then echo 'No X-Plane install-location file found; launch X-Plane manually once first.' >&2; exit 1; fi\n  xpRoot=$(head -n1 \"$installFile\" | tr -d '\\r\\n')\n  exe=$(find \"$xpRoot\" -maxdepth 1 -iname 'X-Plane*' -executable -type f | head -n1)\n  if [ -z \"$exe\" ]; then echo \"Could not find an X-Plane executable under $xpRoot\" >&2; exit 1; fi\n  echo \"Starting $exe...\"\n  nohup \"$exe\" > /dev/null 2>&1 &\n  deadline=$((SECONDS + 120))\n  until pgrep -f 'X-Plane' > /dev/null; do\n    if [ $SECONDS -gt $deadline ]; then echo 'Timed out waiting for X-Plane to start.' >&2; exit 1; fi\n    sleep 1\n  done\n  echo 'X-Plane process detected; first cold launch can take a while before flight loops start ticking.'\nelse\n  echo 'X-Plane already running.'\nfi"
-        ]
+        "args": ["${workspaceFolder}/scripts/ensure-xplane-running.sh"]
       },
       "presentation": {
         "reveal": "silent",
@@ -38,30 +25,17 @@
     {
       "label": "hot-reload: install loader",
       "type": "shell",
-      "options": {
-        "cwd": "${workspaceFolder}/../.."
-      },
       "windows": {
         "command": "pwsh",
-        "args": [
-          "-NoProfile",
-          "-Command",
-          "cargo build -p hot-reload-xpl\nif ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n$installFile = \"$env:LocalAppData\\x-plane_install_12.txt\"; if (-not (Test-Path $installFile)) { $installFile = \"$env:LocalAppData\\x-plane_install_11.txt\" }\n$xpRoot = (Get-Content $installFile -TotalCount 1).Trim()\n$dest = Join-Path $xpRoot 'Resources\\plugins\\hot-reload-xpl\\64'\nNew-Item -ItemType Directory -Force -Path $dest | Out-Null\nCopy-Item -Force 'target\\debug\\hot_reload_xpl.dll' (Join-Path $dest 'win.xpl')\nWrite-Host \"Installed loader to $dest\\win.xpl\""
-        ]
+        "args": ["-NoProfile", "-File", "${workspaceFolder}/scripts/install-loader.ps1"]
       },
       "osx": {
         "command": "bash",
-        "args": [
-          "-c",
-          "set -e\ncargo build -p hot-reload-xpl\ninstallFile=\"$HOME/Library/Preferences/x-plane_install_12.txt\"\n[ -f \"$installFile\" ] || installFile=\"$HOME/Library/Preferences/x-plane_install_11.txt\"\nxpRoot=$(head -n1 \"$installFile\" | tr -d '\\r\\n')\ndest=\"$xpRoot/Resources/plugins/hot-reload-xpl/64\"\nmkdir -p \"$dest\"\ncp -f target/debug/libhot_reload_xpl.dylib \"$dest/mac.xpl\"\necho \"Installed loader to $dest/mac.xpl\""
-        ]
+        "args": ["${workspaceFolder}/scripts/install-loader.sh"]
       },
       "linux": {
         "command": "bash",
-        "args": [
-          "-c",
-          "set -e\ncargo build -p hot-reload-xpl\ninstallFile=\"$HOME/.x-plane_install_12.txt\"\n[ -f \"$installFile\" ] || installFile=\"$HOME/.x-plane_install_11.txt\"\nxpRoot=$(head -n1 \"$installFile\" | tr -d '\\r\\n')\ndest=\"$xpRoot/Resources/plugins/hot-reload-xpl/64\"\nmkdir -p \"$dest\"\ncp -f target/debug/libhot_reload_xpl.so \"$dest/lin.xpl\"\necho \"Installed loader to $dest/lin.xpl\""
-        ]
+        "args": ["${workspaceFolder}/scripts/install-loader.sh"]
       },
       "dependsOn": ["hot-reload: ensure X-Plane running"],
       "problemMatcher": ["$rustc"]
@@ -69,30 +43,17 @@
     {
       "label": "hot-reload: build payload",
       "type": "shell",
-      "options": {
-        "cwd": "${workspaceFolder}/../.."
-      },
       "windows": {
         "command": "pwsh",
-        "args": [
-          "-NoProfile",
-          "-Command",
-          "$id = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()\n$messages = cargo rustc -p hot-reload-dll --lib --message-format=json -- -C extra-filename=\"-$id\" | ConvertFrom-Json\nif ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n$artifact = $messages | Where-Object { $_.reason -eq 'compiler-artifact' -and $_.target.name -eq 'hot-reload-dll' } | Select-Object -Last 1\n$dllPath = $artifact.filenames | Where-Object { $_ -like '*.dll' } | Select-Object -First 1\nif (-not $dllPath) { throw 'Could not determine the built payload DLL path from cargo output.' }\n$watchDir = Join-Path $env:LocalAppData 'xplm-hotreload'\nNew-Item -ItemType Directory -Force -Path $watchDir | Out-Null\n$watchFile = Join-Path $watchDir 'hot-reload-example.json'\n$tmpFile = \"$watchFile.tmp\"\n@{ payload_path = $dllPath; build_id = \"$id\" } | ConvertTo-Json | Set-Content -Path $tmpFile -Encoding utf8\nMove-Item -Force $tmpFile $watchFile\nWrite-Host \"Published payload build $id -> $dllPath\""
-        ]
+        "args": ["-NoProfile", "-File", "${workspaceFolder}/scripts/build-payload.ps1"]
       },
       "osx": {
         "command": "bash",
-        "args": [
-          "-c",
-          "set -e\n# Requires `jq` (brew install jq) to parse cargo's --message-format=json stream.\nid=$(date +%s%3N)\ndllPath=$(cargo rustc -p hot-reload-dll --lib --message-format=json -- -C extra-filename=\"-$id\" | jq -r --arg name hot-reload-dll 'select(.reason==\"compiler-artifact\" and .target.name==$name) | .filenames[]' | grep -E '\\.dylib$' | tail -n1)\nif [ -z \"$dllPath\" ]; then echo 'Could not determine the built payload dylib path from cargo output.' >&2; exit 1; fi\nwatchDir=\"$HOME/Library/Application Support/xplm-hotreload\"\nmkdir -p \"$watchDir\"\nwatchFile=\"$watchDir/hot-reload-example.json\"\njq -n --arg path \"$dllPath\" --arg id \"$id\" '{payload_path: $path, build_id: $id}' > \"$watchFile.tmp\"\nmv -f \"$watchFile.tmp\" \"$watchFile\"\necho \"Published payload build $id -> $dllPath\""
-        ]
+        "args": ["${workspaceFolder}/scripts/build-payload.sh"]
       },
       "linux": {
         "command": "bash",
-        "args": [
-          "-c",
-          "set -e\n# Requires `jq` (apt install jq / dnf install jq) to parse cargo's --message-format=json stream.\nid=$(date +%s%3N)\ndllPath=$(cargo rustc -p hot-reload-dll --lib --message-format=json -- -C extra-filename=\"-$id\" | jq -r --arg name hot-reload-dll 'select(.reason==\"compiler-artifact\" and .target.name==$name) | .filenames[]' | grep -E '\\.so$' | tail -n1)\nif [ -z \"$dllPath\" ]; then echo 'Could not determine the built payload .so path from cargo output.' >&2; exit 1; fi\nwatchDir=\"${XDG_DATA_HOME:-$HOME/.local/share}/xplm-hotreload\"\nmkdir -p \"$watchDir\"\nwatchFile=\"$watchDir/hot-reload-example.json\"\njq -n --arg path \"$dllPath\" --arg id \"$id\" '{payload_path: $path, build_id: $id}' > \"$watchFile.tmp\"\nmv -f \"$watchFile.tmp\" \"$watchFile\"\necho \"Published payload build $id -> $dllPath\""
-        ]
+        "args": ["${workspaceFolder}/scripts/build-payload.sh"]
       },
       "dependsOn": ["hot-reload: install loader"],
       "problemMatcher": ["$rustc"]

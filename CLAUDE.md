@@ -7,14 +7,17 @@ checks.
 
 ## Workspace layout
 
-- `xplm-sys` — raw `bindgen` FFI over `SDK/CHeaders`. No safety, no ergonomics.
+- `xplm-sys` — raw `bindgen` FFI over `xplm-sys/vendor/xplm-sdk/CHeaders`. No
+  safety, no ergonomics.
 - `xplm` — safe wrappers: panic-boundary `guard()`, DataRef access-gating, plugin
   lifecycle, RAII wrappers for windows/menus/instances/commands, callback trampolines
   backed by a closure registry.
 - `xplm-macros` — `#[plugin(...)]` attribute macro and `#[derive(DataRefContainer)]`,
   re-exported through `xplm`.
-- `external/XPMP2` — git submodule of https://github.com/TwinFan/XPMP2.git
-  (pinned to `master`/`v3.6.1`, currently the same commit). Its public
+- `xpmp2-sys/vendor/XPMP2` — git submodule of https://github.com/TwinFan/XPMP2.git
+  (pinned to `master`/`v3.6.1`, currently the same commit; relocated here from
+  the repo root so `xpmp2-sys` stays independently `cargo publish`-able —
+  Cargo can only package files inside a crate's own directory). Its public
   plane-creation API is a C++ class (`XPMP2::Aircraft`, subclass + override
   virtuals), not flat C, despite the SDK's own naming suggesting otherwise
   (`XPCAircraft.h` is itself a deprecated *C++* wrapper class, not a C API).
@@ -33,9 +36,24 @@ checks.
 
 ## SDK headers
 
-`SDK/` is gitignored — not committed. See [README.md](README.md) for the download
-link and expected layout. Never assume `SDK/` exists in a fresh checkout; if a build
-fails because `SDK/CHeaders` is missing, that's the download step, not a bug.
+The X-Plane SDK is vendored *inside* the crates that need it, not at the repo
+root: `xplm-sys/vendor/xplm-sdk` (full SDK) and `xpmp2-sys/vendor/xplm-sdk`
+(headers-only subset — deliberately duplicated rather than one crate reaching
+into the other's directory, since Cargo can only package files inside a
+crate's own root; each `-sys` crate needs its own copy to stay independently
+`cargo publish`-able). Both paths are gitignored — run
+`scripts/fetch-xplm-sdk.ps1`/`.sh` once per machine instead of downloading
+manually. Never assume either `vendor/xplm-sdk` exists in a fresh checkout;
+if a build fails because headers are missing, that's the fetch-script step,
+not a bug. Both `build.rs`es also honor an `XPLM_SDK_DIR` env var override
+for anyone pointing at a different SDK checkout.
+
+Despite being gitignored, both crates' `Cargo.toml` explicitly `include`
+their vendored SDK content, so `cargo publish` (and a real downstream
+`cargo add`'d consumer) gets a self-contained, buildable crate with no extra
+steps — `include` pulls from disk regardless of `.gitignore`, it doesn't
+require git-tracking. A maintainer must run the fetch script before
+`cargo publish` for this to actually have content to package.
 
 ## Version features
 
@@ -46,13 +64,14 @@ until the headers here are updated and the user asks for it). They cascade low-t
 in both `xplm-sys/Cargo.toml` and `xplm/Cargo.toml` because the SDK does not imply
 lower versions when a higher one is defined — enabling `XPLM420` must pass every
 `-D` flag for the versions below it too. Don't add a new version feature without
-checking it's actually present as an `#if defined(XPLM...)` guard in `SDK/CHeaders`
-first (`grep -rohE "XPLM[0-9]{3}" SDK/CHeaders/*/*.h | sort -u`).
+checking it's actually present as an `#if defined(XPLM...)` guard in
+`xplm-sys/vendor/xplm-sdk/CHeaders` first
+(`grep -rohE "XPLM[0-9]{3}" xplm-sys/vendor/xplm-sdk/CHeaders/*/*.h | sort -u`).
 
 ## Optional native libraries
 
 `widgets` (`xplm-sys` → `xplm`, off by default, same shape as `deprecated`)
-bindgens and links `SDK/CHeaders/Widgets` + `XPWidgets_64` — a second native
+bindgens and links `xplm-sys/vendor/xplm-sdk/CHeaders/Widgets` + `XPWidgets_64` — a second native
 DLL alongside `XPLM_64`. It's still a flat C API `bindgen` handles the same
 way as the rest of the SDK; it's feature-gated purely so a plugin that never
 touches the widgets toolkit doesn't link a DLL it never calls into. Don't
@@ -82,7 +101,7 @@ never an empty `csl_id`. An empty `csl_id` makes XPMP2 fall back to its own
 local `ChangeModel`/`CSLModelMatching`, which needs `Doc8643.txt`/`related.txt`
 (on-demand mode has no reason to bundle those) and outright fails, via a
 thrown `XPMP2Error`, the first time ever, before any package has been loaded
-(`external/XPMP2/src/CSLModels.cpp`'s `CSLModelMatching` bails out immediately
+(`xpmp2-sys/vendor/XPMP2/src/CSLModels.cpp`'s `CSLModelMatching` bails out immediately
 if `glob.mapCSLModels` is empty). `Plane::new` asserts against this (panics on
 an empty `csl_id`) when built with `csl-on-demand`.
 

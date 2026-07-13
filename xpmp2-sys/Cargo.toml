@@ -1,6 +1,6 @@
 [package]
 name = "flybywireless-xpmp2-sys"
-version = "0.1.2"
+version = "0.1.3"
 description = "Raw FFI over XPMP2 for X-Plane multiplayer aircraft"
 edition.workspace = true
 authors.workspace = true
@@ -8,6 +8,19 @@ readme = "README.md"
 license.workspace = true
 repository.workspace = true
 build = "build.rs"
+# See xplm-sys/Cargo.toml's identical comment: vendor/ dirs are gitignored
+# but must ship in the published tarball regardless, via explicit include.
+include = [
+    "src/**",
+    "shim/**",
+    "build.rs",
+    "Cargo.toml",
+    "README.md",
+    "vendor/xplm-sdk/CHeaders/XPLM/**",
+    "vendor/XPMP2/inc/**",
+    "vendor/XPMP2/src/**",
+    "vendor/XPMP2/LICENSE",
+]
 
 [dependencies]
 

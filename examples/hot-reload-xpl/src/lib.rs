@@ -77,6 +77,10 @@ fn read_watch_file() -> Option<WatchFile> {
 /// simplicity over micro-optimizing a cold path.
 struct LoadedPayload {
     library: Library,
+    /// The staged DLL/dylib/so this payload was loaded from — kept so it can
+    /// be deleted once `library` drops and releases the file lock, instead
+    /// of leaving every past build's staging file behind forever.
+    path: PathBuf,
     build_id: String,
     enabled: bool,
 }
@@ -112,13 +116,25 @@ impl LoadedPayload {
 
     /// Disables (if needed), calls the payload's `XPluginStop`, then drops
     /// `library` — the `FreeLibrary` equivalent, releasing the file lock on
-    /// the old build's DLL so it can eventually be cleaned up.
+    /// the old build's DLL — and finally deletes the now-unlocked file.
+    /// Best-effort: a delete failure (e.g. still transiently locked on some
+    /// platform/timing edge case) is logged, not fatal — an orphaned staging
+    /// file is a minor disk-space nit, not a correctness problem.
     fn stop(mut self) {
         self.disable();
         unsafe {
             if let Some(f) = self.symbol::<StopFn>(b"XPluginStop\0") {
                 f();
             }
+        }
+        let path = self.path.clone();
+        drop(self.library);
+        if let Err(e) = fs::remove_file(&path) {
+            xplm::log(&format!(
+                "hot-reload-xpl: failed to clean up old payload file {path:?}: {e}\n"
+            ));
+        } else {
+            xplm::log(&format!("hot-reload-xpl: cleaned up old payload file {path:?}\n"));
         }
     }
 }
@@ -170,6 +186,7 @@ fn load_payload(payload_path: &str, build_id: &str) -> Option<(LoadedPayload, St
     Some((
         LoadedPayload {
             library,
+            path: PathBuf::from(payload_path),
             build_id: build_id.to_string(),
             enabled: false,
         },

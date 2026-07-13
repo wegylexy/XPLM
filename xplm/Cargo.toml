@@ -1,6 +1,6 @@
 [package]
 name = "flybywireless-xplm"
-version = "0.1.2"
+version = "0.1.3"
 description = "Safe, idiomatic Rust wrappers over the X-Plane plugin SDK"
 edition.workspace = true
 authors.workspace = true
@@ -9,8 +9,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-xplm-sys = { package = "flybywireless-xplm-sys", path = "../xplm-sys", version = "0.1.2", default-features = false }
-xplm-macros = { package = "flybywireless-xplm-macros", path = "../xplm-macros", version = "0.1.2" }
+xplm-sys = { package = "flybywireless-xplm-sys", path = "../xplm-sys", version = "0.1.3", default-features = false }
+xplm-macros = { package = "flybywireless-xplm-macros", path = "../xplm-macros", version = "0.1.3" }
 
 [dev-dependencies]
 trybuild = "1"

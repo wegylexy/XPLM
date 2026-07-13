@@ -34,26 +34,52 @@ const SOURCES: &[&str] = &[
     "XPMPMultiplayer.cpp",
 ];
 
+/// Resolves the vendored XPMP2 source: `XPMP2_SRC_DIR` env var override if
+/// set, else this crate's own `vendor/XPMP2` (a relocated git submodule —
+/// see `.gitmodules`; also what a published tarball contains).
+fn xpmp2_dir(manifest_dir: &std::path::Path) -> PathBuf {
+    if let Some(dir) = env::var_os("XPMP2_SRC_DIR") {
+        return PathBuf::from(dir);
+    }
+    manifest_dir.join("vendor/XPMP2")
+}
+
+/// Resolves the vendored XPLM headers subset this crate needs (headers
+/// only — linking `XPLM_64` itself is `xplm-sys`'s job): `XPLM_SDK_DIR` env
+/// var override (same name `xplm-sys` reads, pointing at a full SDK dir) if
+/// set, else this crate's own `vendor/xplm-sdk/CHeaders/XPLM` — a small,
+/// deliberately duplicated copy of the same subset `xplm-sys` vendors, kept
+/// in sync manually if the SDK is ever upgraded (same "duplicated but
+/// documented" tradeoff as this crate's own `regex_escape` vs. `xplm-sys`'s).
+fn xplm_headers_dir(manifest_dir: &std::path::Path) -> PathBuf {
+    if let Some(dir) = env::var_os("XPLM_SDK_DIR") {
+        return PathBuf::from(dir).join("CHeaders/XPLM");
+    }
+    manifest_dir.join("vendor/xplm-sdk/CHeaders/XPLM")
+}
+
 fn main() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let xpmp2_dir = manifest_dir.join("../external/XPMP2");
+    let xpmp2_dir = xpmp2_dir(&manifest_dir);
     let xpmp2_inc = xpmp2_dir.join("inc");
     let xpmp2_src = xpmp2_dir.join("src");
-    let xplm_headers = manifest_dir.join("../SDK/CHeaders/XPLM");
+    let xplm_headers = xplm_headers_dir(&manifest_dir);
     let shim_dir = manifest_dir.join("shim");
 
     if !xpmp2_inc.join("XPMPMultiplayer.h").is_file() {
         panic!(
-            "external/XPMP2 submodule not found/initialized (expected {}). \
-             Run `git submodule update --init external/XPMP2`.",
+            "XPMP2 source not found/initialized (expected {}). Run \
+             `git submodule update --init xpmp2-sys/vendor/XPMP2`, or set \
+             XPMP2_SRC_DIR to point at your own checkout.",
             xpmp2_inc.display()
         );
     }
     if !xplm_headers.join("XPLMDefs.h").is_file() {
         panic!(
-            "SDK/CHeaders/XPLM not found (expected {}) — see README.md for \
-             the SDK download step; xpmp2-sys needs it for the same reason \
-             xplm-sys does (XPMP2's own headers include XPLM's).",
+            "XPLM headers not found (expected {}) — see README.md's \
+             \"Getting the SDK\" section; xpmp2-sys needs a copy for the \
+             same reason xplm-sys does (XPMP2's own headers include \
+             XPLM's), or set XPLM_SDK_DIR to point at your own SDK checkout.",
             xplm_headers.display()
         );
     }

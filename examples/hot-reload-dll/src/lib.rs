@@ -14,7 +14,7 @@ use xplm::processing::{FlightLoop, FlightLoopPhase};
 /// The value a dev edits between reloads. 122_800 = 122.800 MHz encoded per
 /// `com1_frequency_hz_833`'s 8.33 kHz channel-spacing convention (value is
 /// the frequency in Hz, sans trailing zero, e.g. 118.000 MHz -> 11800).
-const COM1_FREQ_833: i32 = 122_800;
+const COM1_FREQ_833: i32 = 118_300;
 
 #[xplm::plugin(
     name = "Hot Reload Demo Payload",
@@ -34,19 +34,42 @@ impl XPlanePlugin for HotReloadPayload {
         // Deferred to the first flight loop tick rather than done here
         // directly: some datarefs aren't guaranteed valid yet at
         // XPluginStart time, so waiting one tick is the realistic pattern,
-        // not just a demo contrivance.
-        let tune_once = FlightLoop::new(FlightLoopPhase::AfterFlightModel, |_, _, _| {
-            match ReadWrite::<i32>::find("sim/cockpit2/radios/actuators/com1_frequency_hz_833") {
-                Some(com1_freq) => {
-                    xplm::log(&format!(
-                        "hot-reload-dll: com1_frequency_hz_833 was {}, tuning to {COM1_FREQ_833}\n",
-                        com1_freq.get()
-                    ));
-                    com1_freq.set(COM1_FREQ_833);
-                }
-                None => xplm::log("hot-reload-dll: com1_frequency_hz_833 dataref not found\n"),
+        // not just a demo contrivance. Runs twice, not once: tick 1 writes
+        // the value, tick 2 reads it back — a `set()` that returns doesn't
+        // guarantee the sim actually applied it (some datarefs clamp/ignore
+        // out-of-range writes), so this confirms the write stuck instead of
+        // just trusting the call succeeded.
+        let mut tuned = false;
+        let tune_once = FlightLoop::new(FlightLoopPhase::AfterFlightModel, move |_, _, _| {
+            let Some(com1_freq) =
+                ReadWrite::<i32>::find("sim/cockpit2/radios/actuators/com1_frequency_hz_833")
+            else {
+                xplm::log("hot-reload-dll: com1_frequency_hz_833 dataref not found\n");
+                return 0.0;
+            };
+
+            if !tuned {
+                xplm::log(&format!(
+                    "hot-reload-dll: com1_frequency_hz_833 was {}, tuning to {COM1_FREQ_833}\n",
+                    com1_freq.get()
+                ));
+                com1_freq.set(COM1_FREQ_833);
+                tuned = true;
+                return -1.0; // one more tick, to read back and confirm
             }
-            0.0 // one-shot: don't reschedule
+
+            let confirmed = com1_freq.get();
+            if confirmed == COM1_FREQ_833 {
+                xplm::log(&format!(
+                    "hot-reload-dll: confirmed com1_frequency_hz_833 == {confirmed} on the next loop\n"
+                ));
+            } else {
+                xplm::log(&format!(
+                    "hot-reload-dll: com1_frequency_hz_833 is {confirmed}, expected {COM1_FREQ_833} \
+                     — another plugin may have overwritten it\n"
+                ));
+            }
+            0.0 // done
         });
         tune_once.schedule(-1.0, true); // fire on the very next flight loop cycle
 

@@ -22,9 +22,21 @@ fn regex_escape(s: &str) -> String {
     out
 }
 
+/// Resolves the vendored X-Plane SDK: `XPLM_SDK_DIR` env var override (for
+/// anyone pointing at a different SDK checkout) if set, else this crate's
+/// own `vendor/xplm-sdk` — the latter is what a published crate tarball
+/// actually contains (see `Cargo.toml`'s `include`), so a downstream
+/// `cargo add`'d consumer builds with zero extra steps by default.
+fn sdk_dir(manifest_dir: &std::path::Path) -> PathBuf {
+    if let Some(dir) = env::var_os("XPLM_SDK_DIR") {
+        return PathBuf::from(dir);
+    }
+    manifest_dir.join("vendor/xplm-sdk")
+}
+
 fn main() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let sdk_dir = manifest_dir.join("../SDK");
+    let sdk_dir = sdk_dir(&manifest_dir);
     let headers_dir = sdk_dir.join("CHeaders");
 
     let defines: Vec<&str> = XPLM_VERSIONS
@@ -141,21 +153,49 @@ fn main() {
         "macos" => sdk_dir.join("Libraries/Mac"),
         other => panic!("unsupported target_os for XPLM SDK linking: {other}"),
     };
-    println!("cargo:rustc-link-search=native={}", lib_dir.display());
-    if target_os == "windows" {
-        println!("cargo:rustc-link-lib=dylib=XPLM_64");
-        // XPLM_64.dll only exists inside a running X-Plane process. Delay-load
-        // it so `cargo test`/standalone tools can start (and run everything
-        // that doesn't actually call into the sim) without it on PATH — it's
-        // only resolved lazily, on first real call into an XPLM_* function.
-        println!("cargo:rustc-link-arg=/DELAYLOAD:XPLM_64.dll");
-        if widgets {
-            println!("cargo:rustc-link-lib=dylib=XPWidgets_64");
-            println!("cargo:rustc-link-arg=/DELAYLOAD:XPWidgets_64.dll");
+    match target_os.as_str() {
+        "windows" => {
+            println!("cargo:rustc-link-search=native={}", lib_dir.display());
+            println!("cargo:rustc-link-lib=dylib=XPLM_64");
+            // XPLM_64.dll only exists inside a running X-Plane process.
+            // Delay-load it so `cargo test`/standalone tools can start (and
+            // run everything that doesn't actually call into the sim)
+            // without it on PATH — it's only resolved lazily, on first real
+            // call into an XPLM_* function.
+            println!("cargo:rustc-link-arg=/DELAYLOAD:XPLM_64.dll");
+            if widgets {
+                println!("cargo:rustc-link-lib=dylib=XPWidgets_64");
+                println!("cargo:rustc-link-arg=/DELAYLOAD:XPWidgets_64.dll");
+            }
+            println!("cargo:rustc-link-lib=dylib=delayimp");
         }
-        println!("cargo:rustc-link-lib=dylib=delayimp");
+        "linux" => {
+            // SDK/Libraries/Lin ships plain XPLM_64.so/XPWidgets_64.so stubs
+            // (unlike Windows, there's no PE-style delay-load equivalent for
+            // ELF — a `cargo test` that actually calls an `XPLM*` function on
+            // Linux needs the real lib resolvable via `LD_LIBRARY_PATH` at
+            // process start; untested on a real Linux machine in this repo's
+            // dev environment, so treat this as convention-based, not
+            // confirmed).
+            println!("cargo:rustc-link-search=native={}", lib_dir.display());
+            println!("cargo:rustc-link-lib=dylib=XPLM_64");
+            if widgets {
+                println!("cargo:rustc-link-lib=dylib=XPWidgets_64");
+            }
+        }
+        "macos" => {
+            // SDK/Libraries/Mac ships XPLM.framework/XPWidgets.framework
+            // bundles, not plain dylibs — link as frameworks, standard
+            // X-Plane plugin convention for this platform. Also untested on
+            // a real Mac in this repo's dev environment.
+            println!("cargo:rustc-link-search=framework={}", lib_dir.display());
+            println!("cargo:rustc-link-lib=framework=XPLM");
+            if widgets {
+                println!("cargo:rustc-link-lib=framework=XPWidgets");
+            }
+        }
+        other => panic!("unsupported target_os for XPLM SDK linking: {other}"),
     }
-    // TODO Linux/macOS link flags (bundle-relative rpath, framework search paths).
 
     println!("cargo:rerun-if-changed={}", headers_dir.display());
 }

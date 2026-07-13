@@ -1,3 +1,4 @@
 /target
 Cargo.lock
-/SDK/
+xplm-sys/vendor/xplm-sdk/
+xpmp2-sys/vendor/xplm-sdk/
