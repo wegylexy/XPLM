@@ -939,6 +939,54 @@ From then on: edit `COM1_FREQ_833` in `examples/hot-reload-dll/src/lib.rs`,
 hit F5 again, and the new frequency gets tuned within about a second — no
 restart, no manual copying.
 
+## Hot-updating a deployed plugin from a companion app
+
+The loader/payload split above is for local development; a companion app
+distributed alongside a *shipped* plugin (an updater, launcher, or installer
+process, running outside X-Plane) faces a related but different problem —
+getting a newly-downloaded build into a running sim without asking the user
+to restart X-Plane. [`xplm-reloader`](xplm-reloader) is the standalone piece for
+that: it has no dependency on `xplm`/`xplm-sys`/the X-Plane SDK at all, since
+it's meant to run from a process that isn't a plugin and can't call
+`XPLMReloadPlugins` directly.
+
+- **`xplm_reloader::discover`** joins X-Plane's UDP "BECN" beacon multicast
+  group (`239.255.1.1:49707`) and returns the address/port of the *local*
+  instance's command socket — filtered against this machine's own network
+  interfaces (via `local-ip-address`) so a beacon from some other X-Plane on
+  the LAN is skipped rather than mistaken for the one to reload.
+- **`xplm_reloader::send_command`**/**`reload_plugins`** then send it an SDK
+  command (`CMND` packet) — `reload_plugins` sends
+  `sim/operation/reload_plugins`, the same effect as Plugin Admin's manual
+  "Reload Plug-ins" button.
+- A `reload-plugins` CLI binary wraps the same call for non-Rust callers —
+  see `examples/hot-reload-xpl/scripts/install-loader.{ps1,sh}` for a real
+  usage (there, to pick up a first-time loader install without restarting
+  X-Plane).
+
+Two things worth knowing before wiring this into a companion updater:
+
+- **Ask first.** `sim/operation/reload_plugins` unloads and reloads *every*
+  installed plugin, not just the one being updated — any other plugin with
+  unsaved in-memory state (a route, a config edit) loses it. A companion app
+  should confirm with the user before calling this rather than firing it
+  silently the moment a download finishes; a user mid-flight with other
+  plugins active may want to defer the reload to their next restart instead.
+- **The plugin's own file must actually be replaceable first.** On Windows, a
+  DLL already loaded by X-Plane can't be overwritten out from under it — the
+  update writer's window is either "the plugin isn't loaded yet" (a
+  first-time install, or the reload above already unloaded it) or "X-Plane
+  isn't running." A plugin that expects to be hot-updated *while X-Plane
+  stays open* should itself ship as the same stable-loader/swappable-payload
+  split as `hot-reload-xpl`/`hot-reload-dll` — the loader is what's actually
+  registered with X-Plane (and so never gets its file locked mid-run), and a
+  companion app only ever needs to drop in a new payload build and update the
+  watch file; the loader's own polling picks it up within a second, with no
+  `xplm-reloader`/UDP command involved at all. `xplm-reloader` is for the
+  case a monolithic (non-split) plugin's file *is* currently replaceable —
+  most commonly a first install into an empty `Resources/plugins/` directory
+  — and X-Plane just needs telling that it's there.
+
 ## Running tests (Windows)
 
 `xplm-sys` delay-loads `XPLM_64.dll` (it only exists inside a running X-Plane

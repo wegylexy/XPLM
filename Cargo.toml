@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["xplm-sys", "xplm", "xplm-macros", "xpmp2-sys", "xpmp2", "examples/hello-plugin", "examples/xpl-template", "examples/xpmp2-template", "examples/hot-reload-dll", "examples/hot-reload-xpl"]
+members = ["xplm-sys", "xplm", "xplm-macros", "xpmp2-sys", "xpmp2", "xplm-reloader", "examples/hello-plugin", "examples/xpl-template", "examples/xpmp2-template", "examples/hot-reload-dll", "examples/hot-reload-xpl"]
 
 [workspace.package]
 edition = "2021"

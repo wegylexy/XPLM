@@ -1,0 +1,17 @@
+[package]
+name = "flybywireless-xplm-reloader"
+version = "0.1.0"
+description = "Discover a running X-Plane instance via its UDP BECN beacon and send it SDK commands (e.g. sim/operation/reload_plugins) over UDP"
+edition.workspace = true
+authors.workspace = true
+readme = "README.md"
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+tokio = { version = "1", features = ["net", "time", "rt-multi-thread", "macros"] }
+local-ip-address = "0.6"
+
+[[bin]]
+name = "reload-plugins"
+path = "src/bin/reload_plugins.rs"
