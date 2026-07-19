@@ -1,9 +1,14 @@
 //! Standalone discovery + command client for a running X-Plane instance,
 //! entirely over UDP — no dependency on the X-Plane SDK/`xplm-sys` at all.
 //! Meant for tooling that lives *outside* a plugin process (e.g. a hot-reload
-//! driver app) and needs to tell an already-running X-Plane to reload its
-//! plugins after a fresh install, without X-Plane itself being the one to
-//! invoke this code.
+//! driver app) and needs to tell an already-running X-Plane to reload plugins
+//! it already knows about, without X-Plane itself being the one to invoke
+//! this code.
+//!
+//! This does NOT help with a brand-new plugin install: `sim/operation/reload_plugins`
+//! only re-loads plugins X-Plane already found in its startup scan of
+//! `Resources/plugins`, it never repeats that scan. A plugin folder that
+//! didn't exist at boot stays invisible until X-Plane is actually restarted.
 //!
 //! X-Plane periodically multicasts a "BECN" beacon packet advertising the UDP
 //! port it listens for commands on (its "Network" settings port is
@@ -163,11 +168,12 @@ pub async fn send_command(target: SocketAddr, command: &str) -> io::Result<()> {
 }
 
 /// Discovers a running X-Plane instance and sends it
-/// `sim/operation/reload_plugins`, forcing it to unload/rescan every plugin
-/// under `Resources/plugins` — the same effect as Plugin Admin's manual
-/// "Reload Plug-ins" button, usable from a tool that isn't itself a plugin
-/// (so can't call `XPLMReloadPlugins` directly, and needs X-Plane to already
-/// be running for a freshly-installed plugin to be picked up at all).
+/// `sim/operation/reload_plugins`, forcing it to unload/reload every plugin
+/// it already found in its startup scan of `Resources/plugins` — the same
+/// effect as Plugin Admin's manual "Reload Plug-ins" button, usable from a
+/// tool that isn't itself a plugin (so can't call `XPLMReloadPlugins`
+/// directly). This does NOT make X-Plane discover a plugin folder that
+/// didn't exist at boot — that still requires a restart.
 pub async fn reload_plugins(discover_timeout: Duration) -> io::Result<()> {
     let beacon = discover(discover_timeout).await?;
     send_command(beacon.addr, "sim/operation/reload_plugins").await

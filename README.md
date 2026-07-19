@@ -918,10 +918,22 @@ even running, does everything automatically:
 
 1. **`hot-reload: install loader`** — builds `hot-reload-xpl` and copies it
    into `<X-Plane>/Resources/plugins/hot-reload-xpl/64/{win,mac,lin}.xpl` (per
-   OS), unconditionally, every run (so a previously-copied loader can never go
-   stale unnoticed). This runs *before* X-Plane is started, since X-Plane only
-   loads plugins present at boot — installing after launch would leave a
-   freshly-started X-Plane without the loader until the next restart.
+   OS), so a previously-copied loader can never go stale unnoticed. This runs
+   *before* X-Plane is started, since X-Plane only loads plugins present at
+   boot — installing after launch would leave a freshly-started X-Plane
+   without the loader until the next restart.
+
+   > **The loader is never reinstalled while X-Plane already has it loaded.**
+   > If X-Plane is already running and the loader file exists, this task skips
+   > the rebuild/copy entirely — X-Plane holds that DLL open, so overwriting
+   > it would either fail outright (Windows file lock) or have no effect until
+   > a restart anyway (`sim/operation/reload_plugins`, see `xplm-reloader`
+   > below, only reloads plugins X-Plane already scanned at boot; it can't
+   > make an already-running X-Plane discover or refresh one). If X-Plane is
+   > running but the loader *isn't* installed yet, the task installs it
+   > (nothing has it locked) and tells you to restart X-Plane once to pick it
+   > up. Once the loader is loaded, every later F5 (payload-only rebuilds)
+   > needs no restart.
 2. **`hot-reload: ensure X-Plane running`** — starts X-Plane (found via the
    install-location file described above) if it isn't already running, and
    waits for the process to appear. A fully cold X-Plane launch takes a while
@@ -959,13 +971,21 @@ it's meant to run from a process that isn't a plugin and can't call
   command (`CMND` packet) — `reload_plugins` sends
   `sim/operation/reload_plugins`, the same effect as Plugin Admin's manual
   "Reload Plug-ins" button.
-- A `reload-plugins` CLI binary wraps the same call for non-Rust callers —
-  see `examples/hot-reload-xpl/scripts/install-loader.{ps1,sh}` for a real
-  usage (there, to pick up a first-time loader install without restarting
-  X-Plane).
+- A `reload-plugins` CLI binary wraps the same call for non-Rust callers.
 
 Two things worth knowing before wiring this into a companion updater:
 
+- **Only reloads plugins X-Plane already scanned at boot — it can't discover a
+  brand-new one.** `sim/operation/reload_plugins` re-runs the *load* step for
+  every plugin path X-Plane found in its startup scan of `Resources/plugins`;
+  it does not repeat that scan. A plugin folder that didn't exist yet when
+  X-Plane started (a first-time install, or one installed while X-Plane is
+  already running) stays invisible to it until X-Plane itself is restarted —
+  there is no UDP command that makes it rescan. `examples/hot-reload-xpl`'s
+  install scripts confirmed this in practice and no longer attempt the UDP
+  reload for that case; they just warn the user to restart X-Plane instead.
+  `xplm-reloader` is only useful here for *updating* a plugin X-Plane already
+  loaded at boot (see below), not for making it notice a new one.
 - **Ask first.** `sim/operation/reload_plugins` unloads and reloads *every*
   installed plugin, not just the one being updated — any other plugin with
   unsaved in-memory state (a route, a config edit) loses it. A companion app
@@ -982,10 +1002,12 @@ Two things worth knowing before wiring this into a companion updater:
   registered with X-Plane (and so never gets its file locked mid-run), and a
   companion app only ever needs to drop in a new payload build and update the
   watch file; the loader's own polling picks it up within a second, with no
-  `xplm-reloader`/UDP command involved at all. `xplm-reloader` is for the
-  case a monolithic (non-split) plugin's file *is* currently replaceable —
-  most commonly a first install into an empty `Resources/plugins/` directory
-  — and X-Plane just needs telling that it's there.
+  `xplm-reloader`/UDP command involved at all. `xplm-reloader` is for the case
+  a monolithic (non-split) plugin's file *is* currently replaceable and
+  X-Plane already had it loaded before the update — e.g. a previous version
+  was running, got unloaded (or the update writer detects it's replaceable)
+  and the new file was written in its place. It is **not** a way to install a
+  plugin into a running X-Plane for the first time — see above.
 
 ## Running tests (Windows)
 

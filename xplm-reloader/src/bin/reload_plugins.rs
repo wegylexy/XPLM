@@ -1,12 +1,15 @@
-//! CLI front-end for `flybywireless_xplm_reloader::reload_plugins` — invoked from
-//! `examples/hot-reload-xpl/scripts/install-loader.{ps1,sh}` so a fresh
-//! install can tell an already-running X-Plane to reload plugins over UDP
-//! instead of requiring the user to restart it.
+//! CLI front-end for `flybywireless_xplm_reloader::reload_plugins`, for
+//! telling an already-running X-Plane to reload plugins it already knows
+//! about (e.g. after replacing an already-loaded plugin's file) without
+//! restarting the sim. NOT usable to make X-Plane discover a brand-new
+//! plugin — `examples/hot-reload-xpl/scripts/install-loader.{ps1,sh}` used to
+//! call this for that case and no longer does, since it doesn't work: a
+//! plugin folder that didn't exist at X-Plane's startup scan stays invisible
+//! until an actual restart.
 //!
 //! Usage: `reload-plugins [timeout_secs]` (default 5). Exits non-zero (with
 //! a message on stderr) if no X-Plane beacon is seen in time, or the send
-//! fails — callers should treat that as "reload didn't happen, restart
-//! X-Plane manually" rather than a hard error.
+//! fails.
 
 use std::time::Duration;
 
