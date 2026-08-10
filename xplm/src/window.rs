@@ -19,19 +19,27 @@ use std::os::raw::{c_char, c_int};
 use xplm_sys::{
     xplm_CursorArrow, xplm_CursorCustom, xplm_CursorDefault, xplm_CursorHidden, xplm_MouseDown,
     xplm_MouseUp, XPLMBringWindowToFront, XPLMCountHotKeys, XPLMCreateWindowEx, XPLMCreateWindow_t,
-    XPLMCursorStatus, XPLMDestroyWindow, XPLMGetHotKeyInfo, XPLMGetNthHotKey,
-    XPLMGetWindowGeometry, XPLMGetWindowIsVisible, XPLMHasKeyboardFocus, XPLMHotKeyID,
-    XPLMIsWindowInFront, XPLMKeyFlags, XPLMMouseStatus, XPLMPluginID, XPLMRegisterHotKey,
-    XPLMRegisterKeySniffer, XPLMSetHotKeyCombination, XPLMSetWindowGeometry,
+    XPLMCursorStatus, XPLMDestroyWindow, XPLMGetHotKeyInfo, XPLMGetMouseLocation, XPLMGetNthHotKey,
+    XPLMGetScreenSize, XPLMGetWindowGeometry, XPLMGetWindowIsVisible, XPLMHasKeyboardFocus,
+    XPLMHotKeyID, XPLMIsWindowInFront, XPLMKeyFlags, XPLMMouseStatus, XPLMPluginID,
+    XPLMRegisterHotKey, XPLMRegisterKeySniffer, XPLMSetHotKeyCombination, XPLMSetWindowGeometry,
     XPLMSetWindowIsVisible, XPLMTakeKeyboardFocus, XPLMUnregisterHotKey, XPLMUnregisterKeySniffer,
     XPLMWindowID,
 };
 
 #[cfg(feature = "XPLM300")]
-use xplm_sys::{xplm_WindowLayerFloatingWindows, XPLMSetWindowTitle, XPLMWindowLayer};
+use xplm_sys::{
+    xplm_WindowCenterOnMonitor, xplm_WindowFullScreenOnAllMonitors, xplm_WindowFullScreenOnMonitor,
+    xplm_WindowLayerFloatingWindows, xplm_WindowPopOut, xplm_WindowPositionFree,
+    XPLMGetAllMonitorBoundsGlobal, XPLMGetMouseLocationGlobal, XPLMSetWindowGravity,
+    XPLMSetWindowPositioningMode, XPLMSetWindowResizingLimits, XPLMSetWindowTitle,
+    XPLMWindowIsPoppedOut, XPLMWindowLayer, XPLMWindowPositioningMode,
+};
 
 #[cfg(feature = "XPLM301")]
-use xplm_sys::{xplm_WindowDecorationRoundRectangle, XPLMWindowDecoration};
+use xplm_sys::{
+    xplm_WindowDecorationRoundRectangle, xplm_WindowVR, XPLMWindowDecoration, XPLMWindowIsInVR,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MouseStatus {
@@ -199,6 +207,128 @@ impl WindowRef {
     pub fn is_in_front(&self) -> bool {
         unsafe { XPLMIsWindowInFront(self.0) != 0 }
     }
+
+    /// Only meaningful for a modern ([`XPLMCreateWindowEx`]-backed) window —
+    /// a legacy window always reports `false`.
+    #[cfg(feature = "XPLM300")]
+    pub fn is_popped_out(&self) -> bool {
+        unsafe { XPLMWindowIsPoppedOut(self.0) != 0 }
+    }
+
+    /// Only meaningful for a modern window compiled against XPLM301+; true
+    /// iff [`WindowRef::set_positioning_mode`] set [`WindowPositioningMode::Vr`].
+    #[cfg(feature = "XPLM301")]
+    pub fn is_in_vr(&self) -> bool {
+        unsafe { XPLMWindowIsInVR(self.0) != 0 }
+    }
+
+    /// Sets how X-Plane positions this window — see [`WindowPositioningMode`].
+    /// `monitor_index` is only used by the monitor-relative modes; pass a
+    /// negative index for "the main X-Plane monitor" (the one with the menu
+    /// bar), or a real index from [`all_monitor_bounds_global`].
+    #[cfg(feature = "XPLM300")]
+    pub fn set_positioning_mode(&self, mode: WindowPositioningMode, monitor_index: i32) {
+        unsafe { XPLMSetWindowPositioningMode(self.0, mode.into(), monitor_index) }
+    }
+
+    /// Controls how this window shifts as the whole X-Plane window resizes:
+    /// `0.0` tracks the left/bottom edge, `1.0` the right/top edge, `0.5`
+    /// stays centered. Default is `(0, 1, 0, 1)` — fixed to the top-left,
+    /// constant size.
+    #[cfg(feature = "XPLM300")]
+    pub fn set_gravity(&self, left: f32, top: f32, right: f32, bottom: f32) {
+        unsafe { XPLMSetWindowGravity(self.0, left, top, right, bottom) }
+    }
+
+    /// Constrains this (modern) window's client-rectangle size, in boxels,
+    /// to `[min, max]` for all future resize operations.
+    #[cfg(feature = "XPLM300")]
+    pub fn set_resizing_limits(
+        &self,
+        min_width: i32,
+        min_height: i32,
+        max_width: i32,
+        max_height: i32,
+    ) {
+        unsafe { XPLMSetWindowResizingLimits(self.0, min_width, min_height, max_width, max_height) }
+    }
+}
+
+/// How X-Plane positions a (modern) window — see `XPLMSetWindowPositioningMode`.
+#[cfg(feature = "XPLM300")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WindowPositioningMode {
+    /// Geometry set explicitly; future position follows gravity, resizing
+    /// limits, and user interaction.
+    Free,
+    CenterOnMonitor,
+    FullScreenOnMonitor,
+    /// Obscure: stretches across *all* monitors and popout windows.
+    FullScreenOnAllMonitors,
+    /// A first-class OS window, independent of the X-Plane window(s).
+    PopOut,
+    /// A floating window shown in the VR headset. Requires XPLM301.
+    #[cfg(feature = "XPLM301")]
+    Vr,
+}
+
+#[cfg(feature = "XPLM300")]
+impl From<WindowPositioningMode> for XPLMWindowPositioningMode {
+    fn from(mode: WindowPositioningMode) -> Self {
+        match mode {
+            WindowPositioningMode::Free => xplm_WindowPositionFree,
+            WindowPositioningMode::CenterOnMonitor => xplm_WindowCenterOnMonitor,
+            WindowPositioningMode::FullScreenOnMonitor => xplm_WindowFullScreenOnMonitor,
+            WindowPositioningMode::FullScreenOnAllMonitors => xplm_WindowFullScreenOnAllMonitors,
+            WindowPositioningMode::PopOut => xplm_WindowPopOut,
+            #[cfg(feature = "XPLM301")]
+            WindowPositioningMode::Vr => xplm_WindowVR,
+        }
+    }
+}
+
+/// The mouse's current location relative to the main X-Plane window's
+/// bottom-left corner, in pixels (legacy) / boxels (modern windows).
+pub fn mouse_location() -> (i32, i32) {
+    let (mut x, mut y) = (0, 0);
+    unsafe { XPLMGetMouseLocation(&mut x, &mut y) };
+    (x, y)
+}
+
+/// The mouse's current location in global desktop boxels — unlike
+/// [`mouse_location`], not relative to the main X-Plane window, and correct
+/// even outside it (e.g. over a popped-out window).
+#[cfg(feature = "XPLM300")]
+pub fn mouse_location_global() -> (i32, i32) {
+    let (mut x, mut y) = (0, 0);
+    unsafe { XPLMGetMouseLocationGlobal(&mut x, &mut y) };
+    (x, y)
+}
+
+/// `(monitor_index, left, top, right, bottom)` in global desktop boxels, for
+/// every monitor X-Plane is currently running full-screen on (a monitor
+/// X-Plane isn't full-screen on is never reported).
+#[cfg(feature = "XPLM300")]
+pub fn all_monitor_bounds_global() -> Vec<(i32, i32, i32, i32, i32)> {
+    unsafe extern "C" fn collect(
+        monitor_index: c_int,
+        left: c_int,
+        top: c_int,
+        right: c_int,
+        bottom: c_int,
+        refcon: *mut c_void,
+    ) {
+        crate::guard(|| {
+            let out = unsafe { &mut *(refcon as *mut Vec<(i32, i32, i32, i32, i32)>) };
+            out.push((monitor_index, left, top, right, bottom));
+        });
+    }
+
+    let mut bounds: Vec<(i32, i32, i32, i32, i32)> = Vec::new();
+    unsafe {
+        XPLMGetAllMonitorBoundsGlobal(Some(collect), &mut bounds as *mut _ as *mut c_void);
+    }
+    bounds
 }
 
 type DrawFn = dyn FnMut(WindowRef) + 'static;
@@ -684,4 +814,14 @@ pub fn hot_key_count() -> i32 {
 pub fn nth_hot_key(index: i32) -> Option<HotKeyId> {
     let id = unsafe { XPLMGetNthHotKey(index) };
     (!id.is_null()).then_some(HotKeyId(id))
+}
+
+/// `(width, height)` in boxels of the main X-Plane window. On a multi-
+/// monitor setup, prefer `XPLMGetScreenBoundsGlobal`/monitor enumeration
+/// instead — this call reports only the "main" screen, per the SDK's own
+/// guidance.
+pub fn screen_size() -> (i32, i32) {
+    let (mut width, mut height) = (0, 0);
+    unsafe { XPLMGetScreenSize(&mut width, &mut height) };
+    (width, height)
 }

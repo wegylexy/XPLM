@@ -14,8 +14,8 @@ use std::os::raw::{c_char, c_void};
 
 use xplm_sys::{
     xplmType_Data, xplmType_Double, xplmType_Float, xplmType_FloatArray, xplmType_Int,
-    xplmType_IntArray, XPLMDataRef, XPLMGetDatab, XPLMRegisterDataAccessor, XPLMSetDatab,
-    XPLMUnregisterDataAccessor,
+    xplmType_IntArray, XPLMDataRef, XPLMDataTypeID, XPLMGetDatab, XPLMRegisterDataAccessor,
+    XPLMSetDatab, XPLMShareData, XPLMUnregisterDataAccessor, XPLMUnshareData,
 };
 
 mod sealed {
@@ -54,6 +54,8 @@ fn find_raw(name: &str) -> Option<XPLMDataRef> {
 /// defines (`xplmType_Int`/`Float`/`Double`).
 pub trait Scalar: sealed_scalar::Sealed + Copy {
     #[doc(hidden)]
+    const TYPE_ID: XPLMDataTypeID;
+    #[doc(hidden)]
     unsafe fn get_raw(raw: XPLMDataRef) -> Self;
     #[doc(hidden)]
     unsafe fn set_raw(raw: XPLMDataRef, value: Self);
@@ -67,6 +69,7 @@ mod sealed_scalar {
 }
 
 impl Scalar for i32 {
+    const TYPE_ID: XPLMDataTypeID = xplmType_Int;
     unsafe fn get_raw(raw: XPLMDataRef) -> Self {
         unsafe { xplm_sys::XPLMGetDatai(raw) }
     }
@@ -76,6 +79,7 @@ impl Scalar for i32 {
 }
 
 impl Scalar for f32 {
+    const TYPE_ID: XPLMDataTypeID = xplmType_Float;
     unsafe fn get_raw(raw: XPLMDataRef) -> Self {
         unsafe { xplm_sys::XPLMGetDataf(raw) }
     }
@@ -85,6 +89,7 @@ impl Scalar for f32 {
 }
 
 impl Scalar for f64 {
+    const TYPE_ID: XPLMDataTypeID = xplmType_Double;
     unsafe fn get_raw(raw: XPLMDataRef) -> Self {
         unsafe { xplm_sys::XPLMGetDatad(raw) }
     }
@@ -141,6 +146,88 @@ impl<T: Scalar, A: Writable> DataRef<T, A> {
 pub type ReadOnly<T> = DataRef<T, ReadOnlyMarker>;
 /// `ReadWrite<f32>` etc.
 pub type ReadWrite<T> = DataRef<T, ReadWriteMarker>;
+
+/// The callback signature for [`SharedDataRef::share`]: called whenever the
+/// shared value changes, by this plugin or another sharer.
+type ShareCallback = dyn FnMut() + 'static;
+
+/// A scalar dataref shared across plugins (`XPLMShareData`/`XPLMUnshareData`)
+/// — the SDK creates the dataref at `name` (with a default value) the first
+/// time it's shared, and every sharer thereafter reads/writes the same
+/// global value via ordinary `XPLMGetData*`/`XPLMSetData*` calls, exactly
+/// like [`DataRef`]. RAII: shares (and registers a change-notification
+/// callback) on [`Self::share`], unshares on `Drop` — the underlying memory
+/// isn't necessarily freed then, since other plugins may still be sharing
+/// it.
+pub struct SharedDataRef<T: Scalar> {
+    dataref: DataRef<T, ReadWriteMarker>,
+    name: CString,
+    refcon: *mut Box<ShareCallback>,
+}
+
+// See `DataRef`'s identical `unsafe impl Send` above for the rationale.
+unsafe impl<T: Scalar> Send for SharedDataRef<T> {}
+
+impl<T: Scalar> SharedDataRef<T> {
+    /// Shares `name`, creating it (with a zero-valued default) if no plugin
+    /// has shared it yet. `on_change` is called after every write to the
+    /// value — including this sharer's own writes. Returns `None` if `name`
+    /// contains an interior NUL, or `XPLMShareData` fails (e.g. `name`
+    /// already exists as a dataref of a different type).
+    pub fn share(name: &str, on_change: impl FnMut() + 'static) -> Option<Self> {
+        let c_name = CString::new(name).ok()?;
+        let boxed: Box<ShareCallback> = Box::new(on_change);
+        let refcon = Box::into_raw(Box::new(boxed));
+        let ok = unsafe {
+            XPLMShareData(
+                c_name.as_ptr(),
+                T::TYPE_ID,
+                Some(share_trampoline),
+                refcon as *mut c_void,
+            )
+        } != 0;
+        if !ok {
+            unsafe { drop(Box::from_raw(refcon)) };
+            return None;
+        }
+        // `XPLMShareData` guarantees the dataref now exists.
+        let dataref = DataRef::find(name)?;
+        Some(Self {
+            dataref,
+            name: c_name,
+            refcon,
+        })
+    }
+
+    pub fn get(&self) -> T {
+        self.dataref.get()
+    }
+
+    pub fn set(&self, value: T) {
+        self.dataref.set(value)
+    }
+}
+
+impl<T: Scalar> Drop for SharedDataRef<T> {
+    fn drop(&mut self) {
+        unsafe {
+            XPLMUnshareData(
+                self.name.as_ptr(),
+                T::TYPE_ID,
+                Some(share_trampoline),
+                self.refcon as *mut c_void,
+            );
+            drop(Box::from_raw(self.refcon));
+        }
+    }
+}
+
+unsafe extern "C" fn share_trampoline(refcon: *mut c_void) {
+    crate::guard(|| {
+        let callback: &mut ShareCallback = unsafe { &mut *(*(refcon as *mut Box<ShareCallback>)) };
+        callback();
+    });
+}
 
 /// An array element type `XPLMGetDatav*`/`XPLMSetDatav*` can read/write.
 /// Sealed to `i32`/`f32` — the two array dataref types the SDK defines

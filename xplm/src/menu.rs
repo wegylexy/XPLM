@@ -20,6 +20,9 @@ use xplm_sys::{
 #[cfg(feature = "XPLM210")]
 use xplm_sys::XPLMRemoveMenuItem;
 
+#[cfg(feature = "XPLM300")]
+use xplm_sys::{XPLMAppendMenuItemWithCommand, XPLMFindAircraftMenu};
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MenuCheckState {
     NoCheck,
@@ -173,6 +176,44 @@ impl Menu {
         Some(MenuItem { menu: self, token })
     }
 
+    /// Appends an item bound directly to `command` instead of this menu's
+    /// click handler — clicking it runs `command` the same as a keyboard
+    /// shortcut bound to it would, and the shortcut (if any) is shown next
+    /// to the item. Returns `None` if `name` contains an interior NUL or the
+    /// append fails.
+    #[cfg(feature = "XPLM300")]
+    pub fn add_item_with_command(
+        &self,
+        name: &str,
+        command: &crate::command::Command,
+    ) -> Option<MenuItem<'_>> {
+        let c_name = CString::new(name).ok()?;
+        let state = unsafe { &*self.state };
+
+        let token = Rc::new(ItemToken);
+        #[cfg(debug_assertions)]
+        let predicted_index = state.items.borrow().len() as i32;
+        let actual_index =
+            unsafe { XPLMAppendMenuItemWithCommand(self.id, c_name.as_ptr(), command.raw()) };
+        if actual_index < 0 {
+            return None;
+        }
+        #[cfg(debug_assertions)]
+        debug_assert_eq!(
+            actual_index, predicted_index,
+            "XPLMAppendMenuItemWithCommand index didn't match our tracked item count"
+        );
+
+        // Same "C side holds a reference" bookkeeping as `add_item` — see
+        // its comment. There's no click trampoline to match this token
+        // against (the command runs directly), but the item still consumes
+        // an index slot that must line up with X-Plane's own reindexing.
+        std::mem::forget(token.clone());
+        state.items.borrow_mut().push(Some(token.clone()));
+
+        Some(MenuItem { menu: self, token })
+    }
+
     pub fn add_separator(&self) {
         unsafe { XPLMAppendMenuSeparator(self.id) };
         let state = unsafe { &*self.state };
@@ -279,6 +320,35 @@ impl MenuItem<'_> {
                 reclaim_leaked_count(&token);
             }
         }
+    }
+}
+
+/// A non-owned handle to the current aircraft's menu (`XPLMFindAircraftMenu`)
+/// — the aircraft itself creates and destroys this menu, so unlike [`Menu`]
+/// there is no `Drop` that tears it down. It also has no click-handler
+/// callback of its own; items can only be bound directly to a
+/// [`crate::command::Command`] via [`Self::append_item_with_command`].
+#[cfg(feature = "XPLM300")]
+pub struct AircraftMenu(XPLMMenuID);
+
+#[cfg(feature = "XPLM300")]
+impl AircraftMenu {
+    /// `None` if the current aircraft has no menu (e.g. the default
+    /// aircraft, or one that doesn't define `menu_item.png`/register menu
+    /// items).
+    pub fn find() -> Option<Self> {
+        let id = unsafe { XPLMFindAircraftMenu() };
+        (!id.is_null()).then_some(Self(id))
+    }
+
+    /// Appends an item bound to `command` — clicking it runs `command`
+    /// directly. Returns `false` if `name` contains an interior NUL or the
+    /// append fails.
+    pub fn append_item_with_command(&self, name: &str, command: &crate::command::Command) -> bool {
+        let Ok(c_name) = CString::new(name) else {
+            return false;
+        };
+        unsafe { XPLMAppendMenuItemWithCommand(self.0, c_name.as_ptr(), command.raw()) >= 0 }
     }
 }
 

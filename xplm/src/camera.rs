@@ -8,7 +8,7 @@ use std::os::raw::c_int;
 
 use xplm_sys::{
     xplm_ControlCameraForever, xplm_ControlCameraUntilViewChanges, XPLMCameraPosition_t,
-    XPLMControlCamera, XPLMDontControlCamera,
+    XPLMControlCamera, XPLMDontControlCamera, XPLMIsCameraBeingControlled, XPLMReadCameraPosition,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -63,6 +63,39 @@ impl From<CameraControlDuration> for xplm_sys::XPLMCameraControlDuration {
             CameraControlDuration::Forever => xplm_ControlCameraForever,
         }
     }
+}
+
+impl From<xplm_sys::XPLMCameraControlDuration> for CameraControlDuration {
+    fn from(raw: xplm_sys::XPLMCameraControlDuration) -> Self {
+        if raw == xplm_ControlCameraForever {
+            CameraControlDuration::Forever
+        } else {
+            CameraControlDuration::UntilViewChanges
+        }
+    }
+}
+
+/// Whether the camera is currently under plugin control (by this plugin or
+/// another one — the SDK has no way to tell which), and if so, for how long.
+pub fn is_camera_being_controlled() -> Option<CameraControlDuration> {
+    let mut raw: xplm_sys::XPLMCameraControlDuration = 0;
+    let controlled = unsafe { XPLMIsCameraBeingControlled(&mut raw) } != 0;
+    controlled.then(|| raw.into())
+}
+
+/// The camera's current position.
+pub fn camera_position() -> CameraPosition {
+    let mut raw = XPLMCameraPosition_t {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+        pitch: 0.0,
+        heading: 0.0,
+        roll: 0.0,
+        zoom: 0.0,
+    };
+    unsafe { XPLMReadCameraPosition(&mut raw) };
+    raw.into()
 }
 
 /// The callback signature: called each drawing cycle while you hold camera

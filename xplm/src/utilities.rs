@@ -5,13 +5,15 @@
 //! `xplm::command`, since they need the RAII + trampoline treatment.
 
 use std::ffi::{CStr, CString};
-use std::os::raw::c_char;
+use std::os::raw::{c_char, c_void};
 
 #[cfg(feature = "XPLM200")]
 use xplm_sys::{xplm_DataFile_ReplayMovie, xplm_DataFile_Situation, XPLMDataFileType};
 use xplm_sys::{
-    XPLMGetDirectoryContents, XPLMGetPrefsPath, XPLMGetSystemPath, XPLMGetVersions,
-    XPLMHostApplicationID, XPLMReloadScenery, XPLMSpeakString,
+    XPLMError_f, XPLMExtractFileAndPath, XPLMFindSymbol, XPLMGetDirectoryContents,
+    XPLMGetDirectorySeparator, XPLMGetLanguage, XPLMGetPrefsPath, XPLMGetSystemPath,
+    XPLMGetVersions, XPLMGetVirtualKeyDescription, XPLMHostApplicationID, XPLMLanguageCode,
+    XPLMReloadScenery, XPLMSetErrorCallback, XPLMSpeakString,
 };
 #[cfg(feature = "XPLM200")]
 use xplm_sys::{XPLMLoadDataFile, XPLMSaveDataFile};
@@ -54,6 +56,99 @@ pub fn speak_string(text: &str) {
         return;
     };
     unsafe { XPLMSpeakString(c_text.as_ptr()) }
+}
+
+/// The platform's directory separator (e.g. `":"` on old Mac OS, `"\"` on
+/// Windows, `"/"` elsewhere) — useful for parsing paths returned by other
+/// SDK calls, since X-Plane does not necessarily use the local platform's
+/// separator convention in every returned path.
+pub fn directory_separator() -> String {
+    let ptr = unsafe { XPLMGetDirectorySeparator() };
+    unsafe { CStr::from_ptr(ptr) }
+        .to_string_lossy()
+        .into_owned()
+}
+
+/// Splits `full_path` (an absolute path) into `(directory, file_name)` —
+/// `directory` has no trailing separator, per `XPLMExtractFileAndPath`.
+/// `None` if `full_path` contains an interior NUL.
+pub fn extract_file_and_path(full_path: &str) -> Option<(String, String)> {
+    let mut buf = full_path.as_bytes().to_vec();
+    buf.push(0);
+    if buf[..buf.len() - 1].contains(&0) {
+        return None;
+    }
+    let file_name_ptr = unsafe { XPLMExtractFileAndPath(buf.as_mut_ptr() as *mut c_char) };
+    let file_name = unsafe { CStr::from_ptr(file_name_ptr) }
+        .to_string_lossy()
+        .into_owned();
+    let directory_end = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+    let directory = String::from_utf8_lossy(&buf[..directory_end]).into_owned();
+    Some((directory, file_name))
+}
+
+/// The language X-Plane is currently running in, as the SDK's raw
+/// `XPLMLanguageCode` (see `xplm_sys::xplm_Language_*` for the known
+/// values — the set has grown across SDK versions, so this stays an `i32`
+/// rather than a version-gated enum).
+pub fn language() -> XPLMLanguageCode {
+    unsafe { XPLMGetLanguage() }
+}
+
+/// Looks up `symbol` (e.g. a newer SDK function's name) at runtime, letting
+/// a plugin built against an older minimum XPLM version opportunistically
+/// call functions from a newer one when running under a host that has them.
+/// `None` if `symbol` contains an interior NUL, or the symbol isn't found.
+///
+/// # Safety
+/// The caller must know the correct function signature for `symbol` and
+/// transmute the returned pointer accordingly — there is no way for this
+/// call to verify it.
+pub fn find_symbol(symbol: &str) -> Option<*mut c_void> {
+    let c_symbol = CString::new(symbol).ok()?;
+    let ptr = unsafe { XPLMFindSymbol(c_symbol.as_ptr()) };
+    (!ptr.is_null()).then_some(ptr)
+}
+
+/// A short description of `virtual_key` (a `XPLM_VK_*` code), per
+/// `XPLMGetVirtualKeyDescription` — e.g. `"return"` or `"delete"`. Empty if
+/// unknown.
+pub fn virtual_key_description(virtual_key: c_char) -> String {
+    let ptr = unsafe { XPLMGetVirtualKeyDescription(virtual_key) };
+    if ptr.is_null() {
+        return String::new();
+    }
+    unsafe { CStr::from_ptr(ptr) }
+        .to_string_lossy()
+        .into_owned()
+}
+
+/// The single, process-wide error-callback slot backing [`set_error_callback`]
+/// — the SDK's `XPLMError_f` has no refcon parameter, so (unlike every other
+/// callback in this crate) there is nowhere to stash a per-registration
+/// closure; one global slot is all `XPLMSetErrorCallback` allows for.
+static ERROR_CALLBACK: std::sync::Mutex<Option<Box<dyn FnMut(&str) + Send>>> =
+    std::sync::Mutex::new(None);
+
+unsafe extern "C" fn error_callback_trampoline(message: *const c_char) {
+    crate::guard(|| {
+        let msg = unsafe { CStr::from_ptr(message) }.to_string_lossy();
+        if let Some(callback) = ERROR_CALLBACK.lock().unwrap().as_mut() {
+            callback(&msg);
+        }
+    });
+}
+
+/// Installs a plugin-wide diagnostic-error callback, replacing any
+/// previously installed one — see `XPLMSetErrorCallback`'s docs: this
+/// reports *programming* mistakes (bad API parameters, etc.), not runtime
+/// conditions, and enabling it costs some performance. Pass `None` to
+/// uninstall.
+pub fn set_error_callback(callback: Option<impl FnMut(&str) + Send + 'static>) {
+    let installed = callback.is_some();
+    *ERROR_CALLBACK.lock().unwrap() = callback.map(|c| Box::new(c) as Box<dyn FnMut(&str) + Send>);
+    let raw: XPLMError_f = installed.then_some(error_callback_trampoline as _);
+    unsafe { XPLMSetErrorCallback(raw) };
 }
 
 /// Reloads the current scenery, the same as if the user had used the

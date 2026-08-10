@@ -83,6 +83,14 @@ impl Command {
     ) -> CommandHandler {
         CommandHandler::register(*self, before, callback)
     }
+
+    /// The raw `XPLMCommandRef` — for other `xplm` modules (e.g.
+    /// `xplm::menu`'s `XPLMAppendMenuItemWithCommand` wrapper) that need to
+    /// pass a command straight through to another SDK call.
+    #[cfg(feature = "XPLM300")]
+    pub(crate) fn raw(&self) -> XPLMCommandRef {
+        self.0
+    }
 }
 
 type Callback = dyn FnMut(CommandPhase) -> bool + 'static;

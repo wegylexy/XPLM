@@ -10,8 +10,21 @@ use std::os::raw::{c_float, c_int};
 use xplm_sys::{
     xplm_FlightLoop_Phase_AfterFlightModel, xplm_FlightLoop_Phase_BeforeFlightModel,
     XPLMCreateFlightLoop, XPLMCreateFlightLoop_t, XPLMDestroyFlightLoop, XPLMFlightLoopID,
-    XPLMScheduleFlightLoop,
+    XPLMGetCycleNumber, XPLMGetElapsedTime, XPLMScheduleFlightLoop,
 };
+
+/// Seconds since the sim started, per `XPLMGetElapsedTime` — not wall-clock
+/// time, and not paused-aware; see the SDK's own caveats about drift versus
+/// a flight loop callback's own elapsed-time parameters.
+pub fn elapsed_time() -> f32 {
+    unsafe { XPLMGetElapsedTime() }
+}
+
+/// A counter incrementing once per sim cycle computed/frame rendered, per
+/// `XPLMGetCycleNumber`.
+pub fn cycle_number() -> i32 {
+    unsafe { XPLMGetCycleNumber() }
+}
 
 /// The callback signature X-Plane invokes each flight loop dispatch:
 /// `(elapsed_since_last_call, elapsed_since_last_flight_loop, counter) -> next_interval`.

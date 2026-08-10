@@ -80,7 +80,10 @@ fn parse_becn(buf: &[u8], sender_ip: std::net::IpAddr) -> Option<XPlaneBeacon> {
     let port = read_u16(&mut pos);
 
     let name_bytes = &buf[pos..];
-    let name_end = name_bytes.iter().position(|&b| b == 0).unwrap_or(name_bytes.len());
+    let name_end = name_bytes
+        .iter()
+        .position(|&b| b == 0)
+        .unwrap_or(name_bytes.len());
     let computer_name = String::from_utf8_lossy(&name_bytes[..name_end]).into_owned();
 
     Some(XPlaneBeacon {
