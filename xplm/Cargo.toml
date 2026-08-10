@@ -1,6 +1,6 @@
 [package]
 name = "flybywireless-xplm"
-version = "0.1.5"
+version = "0.1.6"
 description = "Safe, idiomatic Rust wrappers over the X-Plane plugin SDK"
 edition.workspace = true
 authors.workspace = true

@@ -86,6 +86,12 @@ impl From<CursorStatus> for XPLMCursorStatus {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct KeyFlags(XPLMKeyFlags);
 
+impl From<XPLMKeyFlags> for KeyFlags {
+    fn from(flags: XPLMKeyFlags) -> Self {
+        Self(flags)
+    }
+}
+
 impl KeyFlags {
     pub fn shift(self) -> bool {
         self.0 & 1 != 0

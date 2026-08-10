@@ -14,14 +14,21 @@ pub use xplm_macros::DataRefContainer;
 pub use xplm_macros::PublishedDataRefContainer;
 
 pub mod aircraft;
+#[cfg(feature = "XPLM410")]
+pub mod avionics;
 pub mod camera;
 pub mod command;
 pub mod dataref;
 pub mod graphics;
 pub mod instance;
+#[cfg(feature = "XPLM300")]
+pub mod map;
 pub mod menu;
+pub mod navigation;
 pub mod plugin;
 pub mod scenery;
+#[cfg(feature = "XPLM400")]
+pub mod sound;
 pub mod utilities;
 #[cfg(feature = "widgets")]
 pub mod widget;

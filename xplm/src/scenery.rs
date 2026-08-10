@@ -2,10 +2,9 @@
 //! loading. `Instance` (`xplm::instance`) builds on [`Object`]/[`DrawInfo`]
 //! from here.
 
-#[cfg(feature = "XPLM210")]
 use std::ffi::c_void;
-use std::ffi::CString;
-use std::os::raw::c_int;
+use std::ffi::{CStr, CString};
+use std::os::raw::{c_char, c_int};
 
 use xplm_sys::{
     xplm_ProbeHitTerrain, xplm_ProbeMissed, xplm_ProbeY, XPLMCreateProbe, XPLMDestroyProbe,
@@ -15,6 +14,9 @@ use xplm_sys::{
 
 #[cfg(feature = "XPLM210")]
 use xplm_sys::XPLMLoadObjectAsync;
+
+#[cfg(feature = "XPLM200")]
+use xplm_sys::XPLMLookupObjects;
 
 #[cfg(feature = "XPLM300")]
 use xplm_sys::{XPLMDegMagneticToDegTrue, XPLMDegTrueToDegMagnetic, XPLMGetMagneticVariation};
@@ -206,6 +208,42 @@ impl Drop for Object {
 
 #[cfg(feature = "XPLM210")]
 type AsyncCallback = dyn FnOnce(Option<Object>) + 'static;
+
+/// Looks up `virtual_path` in X-Plane's library system (relative to the
+/// X-System folder) and calls `callback` once per matching object's file
+/// path — one virtual path may resolve to several concrete objects,
+/// selected/weighted by `(latitude, longitude)`. Returns the number of
+/// matches found, or `0` if `virtual_path` contains an interior NUL.
+#[cfg(feature = "XPLM200")]
+pub fn lookup_objects(
+    virtual_path: &str,
+    latitude: f32,
+    longitude: f32,
+    mut callback: impl FnMut(&str),
+) -> i32 {
+    unsafe extern "C" fn trampoline(file_path: *const c_char, refcon: *mut c_void) {
+        crate::guard(|| {
+            let callback: &mut &mut dyn FnMut(&str) = unsafe { &mut *(refcon as *mut _) };
+            let path = unsafe { CStr::from_ptr(file_path) }.to_string_lossy();
+            callback(&path);
+        });
+    }
+
+    let Ok(c_path) = CString::new(virtual_path) else {
+        return 0;
+    };
+    let mut trait_obj: &mut dyn FnMut(&str) = &mut callback;
+    let refcon = &mut trait_obj as *mut &mut dyn FnMut(&str) as *mut c_void;
+    unsafe {
+        XPLMLookupObjects(
+            c_path.as_ptr(),
+            latitude,
+            longitude,
+            Some(trampoline),
+            refcon,
+        )
+    }
+}
 
 #[cfg(feature = "XPLM210")]
 unsafe extern "C" fn load_object_trampoline(object: XPLMObjectRef, refcon: *mut c_void) {
