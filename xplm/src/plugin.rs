@@ -137,6 +137,93 @@ pub fn reload_plugins() {
     unsafe { XPLMReloadPlugins() }
 }
 
+/// Adds this plugin's own `Resources/plugins/` directory (and X-Plane's install root) to the
+/// process-wide DLL search path (Windows only — a documented no-op elsewhere, since only
+/// Windows' implicit-dependency search order is order-of-directory-registration-sensitive this
+/// way; macOS/Linux resolve `@rpath`/`RPATH`/`LD_LIBRARY_PATH` differently and aren't affected by
+/// the failure mode this exists for).
+///
+/// Exists for hot-reload loaders specifically: X-Plane resolves a normally-placed plugin's own
+/// implicit dependencies (`XPLM_64.dll`/`XPWidgets_64.dll`, which live in `Resources/plugins/`,
+/// a sibling of every plugin's own folder rather than inside it) by adding that directory to the
+/// process's default DLL search path before ever loading a `.xpl` — but that setup only ever
+/// covers the *first* `LoadLibraryExW` call chain X-Plane itself makes. A hot-reload loader's own
+/// later `LoadLibraryExW` on a payload it loads from a completely different, arbitrary directory
+/// (e.g. a separate build/download cache far from `Resources/plugins/`) is a second, independent
+/// `LoadLibraryExW` call this crate doesn't control the flags of by default — if that payload
+/// implicitly links against `XPLM_64.dll` itself (as any real XPLM-SDK plugin does) and the
+/// process-wide search path set up earlier doesn't apply to it for whatever reason, that load can
+/// fail with a generic "module not found" that gives no hint what's actually missing. Calling
+/// this once, early — e.g. the top of a loader's own `XPluginStart`, before loading any payload —
+/// makes the fix explicit and independent of whatever assumptions might otherwise be made about
+/// X-Plane's own DLL-directory setup being inherited by a later, unrelated load.
+///
+/// Uses [`XPLMGetMyID`]/[`XPLMGetPluginInfo`] (via [`my_id`]) to find this plugin's own on-disk
+/// path, then walks its ancestry looking for the literal `plugins` directory rather than
+/// assuming a fixed depth — X-Plane accepts a plugin either as a bare
+/// `Resources/plugins/<name>.xpl` (one level under `plugins/`) or nested as
+/// `Resources/plugins/<name>/<arch>/win.xpl` (three levels under), and hardcoding either depth
+/// would silently compute the wrong directories for the other. Searching for the directory
+/// actually named `plugins` handles both (and any other depth X-Plane might accept) without
+/// caring which one this particular plugin happens to use.
+#[cfg(windows)]
+pub fn ensure_own_dll_search_paths() {
+    let info = my_id().info();
+    let own_path = std::path::Path::new(&info.file_path);
+    let Some(plugins_dir) = own_path
+        .ancestors()
+        .find(|dir| dir.file_name().is_some_and(|n| n.eq_ignore_ascii_case("plugins")))
+    else {
+        return;
+    };
+    windows_dll_search::add_directory(plugins_dir);
+    if let Some(resources_dir) = plugins_dir.parent() {
+        windows_dll_search::add_directory(resources_dir);
+        if let Some(xplane_root) = resources_dir.parent() {
+            windows_dll_search::add_directory(xplane_root);
+        }
+    }
+}
+
+#[cfg(windows)]
+mod windows_dll_search {
+    use std::ffi::c_void;
+    use std::os::windows::ffi::OsStrExt;
+    use std::path::Path;
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn SetDefaultDllDirectories(DirectoryFlags: u32) -> i32;
+        fn AddDllDirectory(NewDirectory: *const u16) -> *mut c_void;
+    }
+
+    /// `LOAD_LIBRARY_SEARCH_DEFAULT_DIRS` — application dir, System32, and every directory added
+    /// via `AddDllDirectory`. Set once per process; calling it again is harmless (it just
+    /// reapplies the same flag set) since [`add_directory`] may be called more than once.
+    const LOAD_LIBRARY_SEARCH_DEFAULT_DIRS: u32 = 0x0000_1000;
+
+    /// Best-effort: a failure here (an invalid path, or `AddDllDirectory` itself missing on a
+    /// pre-KB2533623 Windows — vanishingly unlikely on any system actually running modern
+    /// X-Plane) just means this particular directory doesn't get added, not a hard error the
+    /// caller needs to react to.
+    pub(super) fn add_directory(dir: &Path) {
+        let Some(dir_str) = dir.to_str() else { return };
+        let wide: Vec<u16> = std::ffi::OsStr::new(dir_str)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        unsafe {
+            SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+            AddDllDirectory(wide.as_ptr());
+        }
+    }
+}
+
+/// See the Windows-specific [`ensure_own_dll_search_paths`] — nothing to do on platforms whose
+/// dynamic linker isn't affected by the failure mode that exists for.
+#[cfg(not(windows))]
+pub fn ensure_own_dll_search_paths() {}
+
 /// Whether this X-Plane installation supports the named optional feature
 /// (e.g. `"XPLM_USE_NATIVE_PATHS"`) — see `XPLMPlugin.h`'s Plugin Features
 /// API docs for the well-known feature strings. `false` if `feature`
