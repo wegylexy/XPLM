@@ -170,10 +170,10 @@ pub fn reload_plugins() {
 pub fn ensure_own_dll_search_paths() {
     let info = my_id().info();
     let own_path = std::path::Path::new(&info.file_path);
-    let Some(plugins_dir) = own_path
-        .ancestors()
-        .find(|dir| dir.file_name().is_some_and(|n| n.eq_ignore_ascii_case("plugins")))
-    else {
+    let Some(plugins_dir) = own_path.ancestors().find(|dir| {
+        dir.file_name()
+            .is_some_and(|n| n.eq_ignore_ascii_case("plugins"))
+    }) else {
         return;
     };
     windows_dll_search::add_directory(plugins_dir);

@@ -48,6 +48,66 @@ use anyhow::{Context, Result};
 use csl_client::ModelClient;
 use xplm::processing::{FlightLoop, FlightLoopPhase};
 
+/// The smallest possible valid PNG: a 1x1 transparent pixel. Good enough for
+/// [`write_stub_resource_dir`]'s `MapIcons.png` — XPMP2 itself never decodes
+/// this file (see that function's doc), it only ever gets handed to
+/// X-Plane's own `XPLMDrawMapIconFromSheet` if a plugin turns on in-sim map
+/// icon drawing, which a `csl-on-demand`-only plugin has no reason to do.
+const STUB_PNG_1X1: &[u8] = &[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG signature
+    0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, // IHDR chunk
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, // 1x1
+    0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, // 8-bit RGBA
+    0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, // IDAT chunk
+    0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4,
+    0x00, // IDAT CRC
+    0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, // IEND chunk
+    0x42, 0x60, 0x82,
+];
+
+/// Writes minimal stub `related.txt`/`Doc8643.txt`/`MapIcons.png` into `dir`
+/// for a plugin that only ever uses `csl-on-demand` (never `csl-offline`) —
+/// `Multiplayer::init`'s `resource_dir` requires these three files to
+/// *exist* regardless of which CSL-loading feature is enabled
+/// (`XPMPValidateResourceFiles` in XPMP2's `XPMPMultiplayer.cpp` runs
+/// unconditionally before either loading strategy is reachable — see
+/// `../README.md`'s CSL-loading section), but on-demand mode never actually
+/// *uses* their content: it always supplies an exact `csl_id`
+/// (`FetchedPackage::csl_id`) rather than falling back to XPMP2's local
+/// `ChangeModel`/`CSLModelMatching`, which is the only thing that reads
+/// `Doc8643.txt`/`related.txt` for real. So a genuinely empty
+/// `related.txt`/`Doc8643.txt` (confirmed against `RelatedLoad`/
+/// `Doc8643Load` in `RelatedDoc8643.cpp`: both just open the file and loop
+/// over zero lines, returning success) and a trivial 1x1 `MapIcons.png`
+/// (confirmed XPMP2 itself never decodes this file, only checks it exists —
+/// see `STUB_PNG_1X1`'s doc) are enough. This spares a `csl-on-demand`-only
+/// plugin from having to vendor XPMP2's real `Resources/` folder at all.
+///
+/// Call this **before** `Multiplayer::init` (which is what actually
+/// validates `dir`), not after — unlike [`CslCache::new`]'s analogous
+/// `_blobs`-package registration, there's no already-initialized
+/// `Multiplayer` to require here, precisely because this has to run earlier
+/// than that. Idempotent: skips any file that's already present, so it's
+/// safe to call every plugin start without ever overwriting a real
+/// `Resources/` folder a plugin author later drops in on purpose (e.g. to
+/// pick up real wake-turbulence categorization for on-demand-matched
+/// aircraft, which is otherwise the one thing this stub gives up).
+pub fn write_stub_resource_dir(dir: impl AsRef<Path>) -> std::io::Result<()> {
+    let dir = dir.as_ref();
+    std::fs::create_dir_all(dir)?;
+    for (name, content) in [
+        ("related.txt", &b""[..]),
+        ("Doc8643.txt", &b""[..]),
+        ("MapIcons.png", STUB_PNG_1X1),
+    ] {
+        let path = dir.join(name);
+        if !path.exists() {
+            std::fs::write(&path, content)?;
+        }
+    }
+    Ok(())
+}
+
 use crate::Multiplayer;
 
 /// A fetched-and-loaded CSL package, ready for [`crate::Plane::new`].
@@ -109,6 +169,23 @@ fn read_csl_id(package_dir: &Path) -> Result<String> {
 /// cache directory and reuse across requests, same as the underlying
 /// `ModelClient` recommends, so concurrent requests for liveries of the
 /// same model share in-flight downloads.
+///
+/// # Hybrid local + on-demand
+///
+/// `csl-on-demand` is the one feature a hybrid plugin needs — it does not
+/// also require enabling `csl-offline`. Load whatever real local CSL
+/// libraries the user has installed with [`CslCache::load_local`] (same
+/// underlying `XPMPLoadCSLPackage` call `Multiplayer::load_csl_package`
+/// makes behind `csl-offline`, just reachable without that feature), and use
+/// [`CslCache::request`]/[`ModelClient::probe`](csl_client::ModelClient::probe)
+/// for everything on-demand. XPMP2 merges every loaded package into one
+/// catalog and matches across all of it regardless of source, so this is
+/// enough by itself to get local-preferred, on-demand-fallback behavior:
+/// probe this cache's server for a candidate's quality, compare it against
+/// whatever quality a local-only `ChangeModel`/`CSLModelMatching` pass
+/// already found, and only actually `request` (i.e. fetch over the network)
+/// when the server's candidate is strictly better. See `csl-on-demand`'s own
+/// `CLAUDE.md` ("Hybrid local+on-demand matching") for the full design.
 pub struct CslCache {
     jobs_tx: mpsc::Sender<Job>,
     out_dir: PathBuf,
@@ -134,15 +211,42 @@ impl CslCache {
     /// `https://csl.example.com`); `out_dir` is a local directory this cache
     /// is free to fill with fetched/reconstructed CSL files — content-
     /// addressed, so it's safe to share across plugins/models and to persist
-    /// across sim restarts. `_multiplayer` is only proof a [`Multiplayer`]
-    /// is live; it isn't stored (nothing here touches XPMP2 until a
-    /// `request`'s fetch actually completes).
+    /// across sim restarts. `blobs_pkg` must match that server's own
+    /// `CSL_BLOBS_PACKAGE` (default `"_blobs"`) — every reconstructed `.obj`
+    /// and every generated `xsb_aircraft.txt` OBJ8 line this cache ever
+    /// writes embeds a `{blobs_pkg}/...` reference, and XPMP2 fails
+    /// `ERR_PKG_UNKNOWN` on any such reference until that exact
+    /// `EXPORT_NAME` has been registered — which is what this constructor
+    /// does immediately, before any fetch can run, by writing a one-line
+    /// `xsb_aircraft.txt` for `{out_dir}/{blobs_pkg}` and loading it like any
+    /// other package. See `csl-on-demand`'s `CLAUDE.md` ("`_blobs`
+    /// references must be `EXPORT_NAME`-relative") for why this has to exist
+    /// at all. `_multiplayer` is only proof a [`Multiplayer`] is live; it
+    /// isn't stored (nothing else here touches XPMP2 until a `request`'s
+    /// fetch actually completes).
     pub fn new(
         _multiplayer: &Multiplayer,
         base_url: impl Into<String>,
         out_dir: impl Into<PathBuf>,
-    ) -> Self {
+        blobs_pkg: impl Into<String>,
+    ) -> Result<Self, String> {
         let out_dir = out_dir.into();
+        let blobs_pkg = blobs_pkg.into();
+
+        let blobs_dir = out_dir.join(&blobs_pkg);
+        std::fs::create_dir_all(&blobs_dir)
+            .map_err(|e| format!("creating {}: {e}", blobs_dir.display()))?;
+        let xsb_path = blobs_dir.join("xsb_aircraft.txt");
+        // Idempotent and content-stable (the whole point of `blobs_pkg`
+        // being a fixed name), so only write it the first time — every
+        // later `new` on the same `out_dir` just re-registers the package
+        // XPMP2-side without touching the file.
+        if !xsb_path.exists() {
+            std::fs::write(&xsb_path, format!("EXPORT_NAME {blobs_pkg}\n"))
+                .map_err(|e| format!("writing {}: {e}", xsb_path.display()))?;
+        }
+        crate::load_csl_package_raw(&blobs_dir.to_string_lossy())?;
+
         let (jobs_tx, jobs_rx) = mpsc::channel::<Job>();
         // Worker thread reports the raw fetch result (not yet loaded into
         // XPMP2, and not yet dispatched to any waiter) keyed by request —
@@ -212,12 +316,12 @@ impl CslCache {
         });
         poll_loop.schedule(-1.0, true);
 
-        Self {
+        Ok(Self {
             jobs_tx,
             out_dir,
             in_flight,
             _poll_loop: poll_loop,
-        }
+        })
     }
 
     /// Requests the best-matching model for `icao`/`airline`/`livery`.
@@ -282,5 +386,26 @@ impl CslCache {
     /// [`CslCache::new`]).
     pub fn out_dir(&self) -> &Path {
         &self.out_dir
+    }
+
+    /// Loads a real, already-installed local CSL package directory —
+    /// the hybrid entry point (see the struct doc's "Hybrid local +
+    /// on-demand" section). Identical to `Multiplayer::load_csl_package`
+    /// (behind the separate `csl-offline` feature): both are a thin call to
+    /// the same `XPMPLoadCSLPackage`, exposed here too so a plugin that only
+    /// wants `csl-on-demand` doesn't have to also enable `csl-offline` (and
+    /// couldn't — the two features are mutually exclusive, see
+    /// `../CLAUDE.md`'s "CSL package loading") purely to load the user's
+    /// existing libraries alongside on-demand fetching.
+    ///
+    /// Call this for every local CSL folder the user has configured, once,
+    /// before matching against them — safe to call more than once overall
+    /// (each additional package's models are added to what's already
+    /// loaded), and models from every source (local or fetched) join the
+    /// same XPMP2 catalog, so `Plane::new`'s own local matching already sees
+    /// all of it with no further wiring needed. Main-thread only, like every
+    /// other `XPMPLoadCSLPackage` call in this crate.
+    pub fn load_local(&self, csl_folder: &str) -> Result<(), String> {
+        crate::load_csl_package_raw(csl_folder)
     }
 }

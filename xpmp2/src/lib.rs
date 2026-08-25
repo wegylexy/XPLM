@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(any(feature = "csl-offline", feature = "csl-on-demand"))]
 use xpmp2_sys::XPMPLoadCSLPackage;
+use xpmp2_sys::XPMPSetSkipResourceValidation;
 use xpmp2_sys::{
     xpmp2_shim_aircraft_camera_bearing, xpmp2_shim_aircraft_camera_dist,
     xpmp2_shim_aircraft_change_model, xpmp2_shim_aircraft_contrail_remove,
@@ -40,23 +41,30 @@ use xpmp2_sys::{
     XPMP2ShimAircraft, XPMPMultiplayerCleanup, XPMPMultiplayerInit,
 };
 
-// Mutually exclusive on purpose: `csl-offline` (bulk-load a local CSL
-// library up front) and `csl-on-demand` (fetch + load exactly one model's
-// package at a time) are two different loading strategies for the same
-// underlying `XPMPLoadCSLPackage` call, not layers meant to compose. Picking
-// both in one build is almost certainly a Cargo.toml mistake (most likely:
-// enabling `csl-on-demand` without also turning off this crate's default
-// features, which include `csl-offline`) rather than an intentional hybrid,
-// so it's a hard compile error instead of silently allowing both APIs.
+// Mutually exclusive on purpose — but this is about which *convenience API
+// surface* is available, not about whether a plugin can combine local and
+// on-demand CSL loading (it can: see `csl_on_demand::CslCache::load_local`).
+// `csl-offline`'s `Multiplayer::load_csl_package` and `csl-on-demand`'s
+// `CslCache` are two thin wrappers over the same underlying
+// `XPMPLoadCSLPackage` call; `csl-on-demand` alone is the hybrid-capable
+// feature (`CslCache::load_local` reaches that same call without needing
+// `csl-offline` at all), so there is never a legitimate reason to enable
+// both APIs in one build. Picking both is almost certainly a Cargo.toml
+// mistake instead (most likely: enabling `csl-on-demand` without also
+// turning off this crate's default features, which include `csl-offline`),
+// so it's a hard compile error instead of silently allowing both surfaces.
 #[cfg(all(feature = "csl-offline", feature = "csl-on-demand"))]
 compile_error!(
     "xpmp2's `csl-offline` and `csl-on-demand` features are mutually exclusive — \
-     enable only the one matching your plugin's loading strategy. This is most \
-     often a Cargo feature-unification accident in a workspace: if one crate \
-     depends on xpmp2 with `csl-offline` and another with `csl-on-demand`, \
-     building both together unifies onto both being enabled. See CLAUDE.md's \
-     \"CSL package loading\" note for why these are two independent loading \
-     strategies, not a dependency chain."
+     enable only the one matching your plugin's loading strategy. Need both local \
+     and on-demand CSL loading in the same plugin? Enable `csl-on-demand` alone and \
+     use `CslCache::load_local` for your local packages — that reaches the same \
+     `XPMPLoadCSLPackage` call `csl-offline`'s `Multiplayer::load_csl_package` does, \
+     without needing `csl-offline` too. This error usually means a Cargo \
+     feature-unification accident in a workspace: if one crate depends on xpmp2 with \
+     `csl-offline` and another with `csl-on-demand`, building both together unifies \
+     onto both being enabled. See CLAUDE.md's \"CSL package loading\" note for the \
+     full reasoning."
 );
 
 #[cfg(feature = "csl-on-demand")]
@@ -88,10 +96,26 @@ pub struct Multiplayer {
 // Not Sync: nothing here supports being read from two threads at once.
 unsafe impl Send for Multiplayer {}
 
+/// Opts out of requiring `related.txt`/`Doc8643.txt`/`MapIcons.png` to exist in the
+/// `resource_dir` [`Multiplayer::init`] will be given — call this **before** `init`, which is
+/// what actually performs the check. This crate's own vendored XPMP2 fork
+/// (`xpmp2-sys/vendor/XPMP2`, `github.com/wegylexy/XPMP2`) adds this specifically for
+/// `csl_on_demand`: a plugin that only ever assigns CSL models by their exact `csl_id` never
+/// relies on XPMP2's own local ICAO/livery matching or Doc8643-derived wake/label data, so those
+/// three files exist purely to support behavior such a plugin never uses. `resource_dir` itself
+/// must still be a real, existing directory; only the three files inside it become optional. An
+/// alternative to this for anyone building against unforked upstream XPMP2 is
+/// `csl_on_demand::write_stub_resource_dir` (behind the `csl-on-demand` feature), which generates
+/// trivial stand-ins for the same three files instead of skipping the check itself.
+pub fn skip_resource_validation(skip: bool) {
+    unsafe { XPMPSetSkipResourceValidation(skip) }
+}
+
 impl Multiplayer {
     /// `plugin_name` is used as the map layer name and in logging.
     /// `resource_dir` must contain XPMP2's supplemental files (`Doc8643.txt`,
-    /// `MapIcons.png`, `related.txt`, optionally `Obj8DataRefs.txt`).
+    /// `MapIcons.png`, `related.txt`, optionally `Obj8DataRefs.txt`) —
+    /// unless [`skip_resource_validation`] was called first.
     /// `default_icao` is a fallback aircraft type when none can otherwise be
     /// deduced; `log_acronym` is a short tag for log output, defaulting to
     /// `plugin_name` if `None`.
@@ -157,7 +181,12 @@ impl Multiplayer {
     /// which loads its fetched package itself rather than routing through
     /// this method. `load_csl_package` exists purely for the bulk/local-
     /// library case, which is why it's gated behind its own `csl-offline`
-    /// feature rather than being unconditionally available.
+    /// feature rather than being unconditionally available. A plugin that
+    /// wants both local and on-demand loading together should enable
+    /// `csl-on-demand` alone and call
+    /// [`csl_on_demand::CslCache::load_local`] instead — the two features
+    /// are mutually exclusive (see `src/lib.rs`'s `compile_error!`), and
+    /// that method reaches the same underlying call as this one does.
     ///
     /// Returns `Err` with XPMP2's human-readable message on failure (empty
     /// string means success, same convention as [`Multiplayer::init`]).

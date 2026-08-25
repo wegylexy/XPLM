@@ -83,10 +83,14 @@ struct Xpmp2Template {
 
 impl XPlanePlugin for Xpmp2Template {
     fn start() -> Self {
-        // TODO: point at this plugin's own bundled copy of XPMP2's
-        // Resources folder (Doc8643.txt, MapIcons.png, related.txt) — see
-        // external/XPMP2/Resources for what needs to ship alongside a real
-        // plugin binary.
+        // This plugin only ever uses csl-on-demand (never csl-offline), so it never needs
+        // XPMP2's real Resources folder — skip_resource_validation (this crate's own forked
+        // XPMP2, see ../../README.md's CSL-loading section) skips the related.txt/Doc8643.txt/
+        // MapIcons.png requirement Multiplayer::init would otherwise enforce. Must run before
+        // Multiplayer::init, which is what actually validates this directory; the directory
+        // itself still has to exist even though nothing needs to be in it.
+        xpmp2::skip_resource_validation(true);
+        std::fs::create_dir_all("./Resources").expect("failed to create ./Resources");
         let multiplayer = Multiplayer::init(
             "Fly by Wireless XPMP2 Template",
             "./Resources",
@@ -95,8 +99,15 @@ impl XPlanePlugin for Xpmp2Template {
         )
         .expect("XPMPMultiplayerInit failed");
 
-        // TODO: point at a real csl-on-demand server.
-        let csl_cache = CslCache::new(&multiplayer, "https://csl.example.com", "./CSLCache");
+        // TODO: point at a real csl-on-demand server. `"_blobs"` matches
+        // that server's default `CSL_BLOBS_PACKAGE` — change both together.
+        let csl_cache = CslCache::new(
+            &multiplayer,
+            "https://csl.example.com",
+            "./CSLCache",
+            "_blobs",
+        )
+        .expect("CslCache::new failed");
 
         let (spotted_tx, spotted_rx) = mpsc::channel::<Spotted>();
         // `CslCache::request`'s callback must be `Send` (it crosses to a

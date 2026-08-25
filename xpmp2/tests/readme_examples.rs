@@ -58,7 +58,13 @@ fn _readme_csl_on_demand(multiplayer: Multiplayer) {
     use std::sync::mpsc;
     use xpmp2::csl_on_demand::{CslCache, FetchedPackage};
 
-    let csl_cache = CslCache::new(&multiplayer, "https://csl.example.com", "./CSLCache");
+    let csl_cache = CslCache::new(
+        &multiplayer,
+        "https://csl.example.com",
+        "./CSLCache",
+        "_blobs",
+    )
+    .expect("CslCache::new failed");
 
     let (fetched_tx, fetched_rx) = mpsc::channel::<Result<FetchedPackage, String>>();
     csl_cache.request(Some("A320"), None, None, None, move |result| {

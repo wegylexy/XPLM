@@ -782,13 +782,20 @@ placed — from outside `Aircraft::update_position` itself — `Plane::aircraft`
 constructed with, returning `&dyn Aircraft`/`&mut dyn Aircraft`.
 
 CSL packages (the actual 3D models XPMP2 draws) get into XPMP2 one of two
-mutually-exclusive ways, each its own opt-in feature:
+ways, each its own opt-in feature and mutually exclusive *as Rust APIs*
+(enabling both is a compile error) — though a plugin that wants both local
+and on-demand loading together doesn't need both features, see
+`csl-on-demand`'s `CslCache::load_local` below. Regardless of which feature
+you pick, `Multiplayer::init`'s `resource_dir` unconditionally needs
+`related.txt`/`Doc8643.txt`/`MapIcons.png` present — `XPMPMultiplayerInit`
+validates those three before either CSL-loading strategy is even reachable,
+so this isn't something `csl-on-demand` lets you skip (see that feature's own
+note below for what it *does* let you skip):
 
 - **`csl-offline`** — a plugin that ships/installs its whole CSL library
   locally, loaded up front via `Multiplayer::load_csl_package`. This is the
-  path that needs `Doc8643.txt`/`related.txt`/`MapIcons.png` in the
-  `resource_dir` passed to `Multiplayer::init`, since XPMP2 does its own
-  ICAO/livery-based matching (`ChangeModel`) against them.
+  path that actually *uses* `Doc8643.txt`/`related.txt` for something, since
+  XPMP2 does its own ICAO/livery-based matching (`ChangeModel`) against them.
 - **`csl-on-demand`** — fetch and load exactly one model's package the
   instant it's needed, via the published
   [`flybywireless-csl-client`](https://crates.io/crates/flybywireless-csl-client)
@@ -803,7 +810,14 @@ mutually-exclusive ways, each its own opt-in feature:
   use std::sync::mpsc;
   use xpmp2::csl_on_demand::{CslCache, FetchedPackage};
 
-  let csl_cache = CslCache::new(&multiplayer, "https://csl.example.com", "./CSLCache");
+  // "_blobs" must match the server's own CSL_BLOBS_PACKAGE (default "_blobs").
+  let csl_cache = CslCache::new(&multiplayer, "https://csl.example.com", "./CSLCache", "_blobs")
+      .expect("CslCache::new failed");
+
+  // Hybrid local + on-demand: no need to also enable `csl-offline` — load
+  // any real local CSL libraries the user has installed directly through
+  // this same cache, and XPMP2 matches across both sources as one catalog.
+  csl_cache.load_local("/path/to/local/CSL/library").expect("load_local failed");
 
   // Non-blocking — modeled on xplm::scenery::Object::load_async's shape.
   // The callback itself must be Send, but Multiplayer/Plane are
@@ -839,12 +853,54 @@ mutually-exclusive ways, each its own opt-in feature:
   }
   ```
 
-  Because on-demand mode always supplies an exact `csl_id`, it never needs
-  `Doc8643.txt`/`related.txt`/`MapIcons.png` — `resource_dir` can point at
-  an otherwise-empty directory. Built with `csl-on-demand`, `Plane::new`
-  panics on an empty `csl_id`, since that would silently (and, before any
-  package is loaded, unsuccessfully) fall back to the local matching path
-  this mode is specifically for avoiding.
+  `Multiplayer::init`'s `resource_dir` normally still needs `related.txt`/
+  `Doc8643.txt`/`MapIcons.png` even in on-demand mode — `XPMPMultiplayerInit`
+  validates those three unconditionally at init time
+  (`XPMPValidateResourceFiles` in XPMP2's `XPMPMultiplayer.cpp`), before
+  either CSL-loading feature enters the picture at all; passing `""` or a
+  directory missing any of them fails `Multiplayer::init` (`Err`, which
+  `.expect(...)` then turns into a panic). What on-demand mode actually
+  avoids needing there is your own CSL *model* packages — since it always
+  supplies an exact `csl_id`, it never falls back to XPMP2's local
+  `ChangeModel` matching, so those three files' *content* is never read for
+  anything real in this mode either.
+
+  This crate's own vendored XPMP2 (a fork,
+  [`wegylexy/XPMP2`](https://github.com/wegylexy/XPMP2), tracking upstream
+  [`TwinFan/XPMP2`](https://github.com/TwinFan/XPMP2)) adds
+  `XPMPSetSkipResourceValidation`/[`xpmp2::skip_resource_validation`] for
+  exactly this case — call it with `true` before `Multiplayer::init` and the
+  three-file requirement is skipped entirely, so a `csl-on-demand`-only
+  plugin never needs to vendor XPMP2's real `Resources/` folder at all:
+
+  ```rust
+  xpmp2::skip_resource_validation(true);
+  let multiplayer = Multiplayer::init(/* ..., */ "./Resources", /* ... */)
+      .expect("XPMPMultiplayerInit failed");
+  ```
+
+  `resource_dir` must still be a real, existing directory (just an empty
+  one is fine). Building against unforked upstream XPMP2 instead? Use
+  [`csl_on_demand::write_stub_resource_dir`] there, which generates trivial
+  stand-ins for the same three files rather than skipping the check itself
+  — checked directly against XPMP2's own parsers: `related.txt`/
+  `Doc8643.txt` just need to be openable (an empty file parses fine, XPMP2
+  falls back to its built-in defaults on every lookup miss), and
+  `MapIcons.png` is never decoded by XPMP2 itself, only checked for
+  existence (it's handed to X-Plane's own map-icon drawing call, which a
+  plugin that never enables in-sim map icons never triggers):
+
+  ```rust
+  xpmp2::csl_on_demand::write_stub_resource_dir("./Resources")
+      .expect("failed to write stub resource dir");
+  let multiplayer = Multiplayer::init(/* ..., */ "./Resources", /* ... */)
+      .expect("XPMPMultiplayerInit failed");
+  ```
+
+  Built with `csl-on-demand`, `Plane::new` panics on an empty `csl_id`, since
+  that would silently (and, before any package is loaded, unsuccessfully)
+  fall back to the local matching path this mode is specifically for
+  avoiding.
 
 A full worked example (simulated traffic-spotted event → fetch → load →
 `Plane::new`, all via `mpsc` channels polled from flight loops, never

@@ -1,6 +1,6 @@
 [package]
 name = "flybywireless-xpmp2"
-version = "0.1.6"
+version = "0.2.0"
 description = "Safe wrappers over flybywireless-xpmp2-sys for X-Plane multiplayer aircraft"
 edition.workspace = true
 authors.workspace = true
@@ -9,13 +9,13 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-xpmp2-sys = { package = "flybywireless-xpmp2-sys", path = "../xpmp2-sys", version = "0.1.4" }
+xpmp2-sys = { package = "flybywireless-xpmp2-sys", path = "../xpmp2-sys", version = "0.1.5" }
 xplm = { package = "flybywireless-xplm", path = "../xplm", version = "0.1.4", default-features = false }
 
 # Only pulled in behind the `csl-on-demand` feature — see src/csl_on_demand.rs.
 # Published, maintained alongside the csl-on-demand server it talks to, so
 # this crate doesn't reimplement it.
-csl-client = { package = "flybywireless-csl-client", version = "0.1", optional = true }
+csl-client = { package = "flybywireless-csl-client", version = "0.2", optional = true }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"], optional = true }
 tokio = { version = "1", features = ["rt"], optional = true }
 anyhow = { version = "1", optional = true }
@@ -32,8 +32,12 @@ XPLM410 = ["XPLM400", "xplm/XPLM410"]
 XPLM420 = ["XPLM410", "xplm/XPLM420"]
 
 # Loading a locally-installed CSL package directory (`XPMPLoadCSLPackage`,
-# `Multiplayer::load_csl_package`) — no extra dependencies, but opt-in like
-# `csl-on-demand` below (neither is in `default`) rather than on by default:
+# `Multiplayer::load_csl_package`) with no extra dependencies (no reqwest/
+# tokio) — for a plugin that only ever loads local libraries. A plugin that
+# wants BOTH local and on-demand loading should enable `csl-on-demand` alone
+# and call its `CslCache::load_local` instead of also enabling this feature —
+# see `src/lib.rs`'s compile_error! for why. Opt-in like `csl-on-demand`
+# below (neither is in `default`) rather than on by default:
 # the two are mutually exclusive (enforced by a `compile_error!` in
 # src/lib.rs, since Cargo features can't express exclusion on their own), and
 # having one on by default would mean any other workspace member depending
